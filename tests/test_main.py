@@ -1,19 +1,14 @@
-"""Tests for main module."""
+"""Tests for the Prometheus MCP servers."""
 
-import pytest
-from prometheus.main import main
-
-
-def test_main_default(capsys):
-    """Test main function with default arguments."""
-    main()
-    captured = capsys.readouterr()
-    assert "Hello, World!" in captured.out
+from prometheus.analysis import analyze
+from prometheus.research import research
 
 
-def test_main_with_name(capsys):
-    """Test main function with a custom name."""
-    main("Alice")
-    captured = capsys.readouterr()
-    assert "Hello, Alice!" in captured.out
+def test_analyze():
+    """Test the analyze tool."""
+    assert analyze("test input") == "Analysis of: test input"
 
+
+def test_research():
+    """Test the research tool."""
+    assert research("test query") == "Research results for: test query"

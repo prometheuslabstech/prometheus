@@ -1,36 +1,22 @@
-"""Main entry point for the Prometheus application."""
+"""Prometheus main entry point."""
 
-import logging
-from typing import Optional
-
-from prometheus.utils import greet
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
+import sys
 
 
-def main(name: Optional[str] = None) -> None:
-    """
-    Main function to run the application.
+def main() -> None:
+    """Run a Prometheus MCP server by name."""
+    server = sys.argv[1] if len(sys.argv) > 1 else None
 
-    Args:
-        name: Optional name to greet. Defaults to None.
-    """
-    logger.info("Starting Prometheus application")
-    
-    if name:
-        message = greet(name)
+    if server == "analysis":
+        from prometheus.analysis import main as run
+    elif server == "research":
+        from prometheus.research import main as run
     else:
-        message = greet("World")
-    
-    print(message)
-    logger.info("Application completed")
+        print("Usage: prometheus <analysis|research>")
+        sys.exit(1)
+
+    run()
 
 
 if __name__ == "__main__":
     main()
-
