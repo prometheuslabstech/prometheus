@@ -37,6 +37,7 @@ python -m py_compile src/prometheus/*.py
 
 ### Build Package
 ```bash
+pip install setuptools wheel
 python setup.py sdist bdist_wheel
 ```
 

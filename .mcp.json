@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "prometheus-analysis": {
+      "command": "prometheus",
+      "args": ["analysis"]
+    }
+  }
+}

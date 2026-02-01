@@ -30,6 +30,7 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-report=html",
 ]
+asyncio_mode = "auto"
 
 [tool.mypy]
 python_version = "3.12"

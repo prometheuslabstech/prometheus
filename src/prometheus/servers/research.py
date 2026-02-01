@@ -1,12 +1,24 @@
 """Prometheus Research MCP Server."""
 
 import logging
+from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP
 
+from prometheus.dagger.aws import AWSClients
+
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("prometheus-research")
+
+@asynccontextmanager
+async def lifespan(server: FastMCP):
+    """Initialize AWS clients for the server lifetime."""
+    clients = AWSClients()
+    clients.initialize()
+    yield clients
+
+
+mcp = FastMCP("prometheus-research", lifespan=lifespan)
 
 
 @mcp.tool()
