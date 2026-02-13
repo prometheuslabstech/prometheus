@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from prometheus.servers.analysis import extract_research_keywords
-from prometheus.servers.research import research
+from prometheus.servers.research import web_search
 
 
 @pytest.mark.asyncio
@@ -17,8 +17,12 @@ async def test_extract_research_keywords():
         mock_bedrock
     )
 
+    mock_bedrock_response = {
+        "output": {"message": {"content": [{"text": '{"securities": ["AAPL"]}'}]}}
+    }
+
     with patch(
-        "prometheus.servers.analysis.converse", return_value='{"securities": ["AAPL"]}'
+        "prometheus.servers.analysis.converse", return_value=mock_bedrock_response
     ) as mock_converse:
         result = await extract_research_keywords(
             "AAPL reported strong revenue growth.", ctx=mock_ctx
@@ -37,8 +41,10 @@ async def test_extract_research_keywords_with_context():
         mock_bedrock
     )
 
+    mock_bedrock_response = {"output": {"message": {"content": [{"text": "{}"}]}}}
+
     with patch(
-        "prometheus.servers.analysis.converse", return_value="{}"
+        "prometheus.servers.analysis.converse", return_value=mock_bedrock_response
     ) as mock_converse:
         await extract_research_keywords(
             "revenue grew 20%", context="TSLA", ctx=mock_ctx
@@ -49,6 +55,25 @@ async def test_extract_research_keywords_with_context():
     assert "revenue grew 20%" in call_kwargs["user_message"]
 
 
-def test_research():
-    """Test the research tool."""
-    assert research("test query") == "Research results for: test query"
+@pytest.mark.asyncio
+async def test_web_search():
+    """Test the web_search tool returns structured JSON."""
+    mock_response = {
+        "results": [
+            {
+                "title": "Test Result",
+                "url": "https://example.com",
+                "content": "Test content",
+            }
+        ]
+    }
+
+    with patch("prometheus.servers.research.search", return_value=mock_response):
+        result = await web_search("test query")
+
+    import json
+
+    parsed = json.loads(result)
+    assert parsed["search_term"] == "test query"
+    assert len(parsed["results"]) == 1
+    assert parsed["results"][0]["title"] == "Test Result"

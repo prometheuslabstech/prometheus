@@ -20,7 +20,11 @@ class GeminiClient:
                      or GOOGLE_API_KEY environment variable.
             model_id: The Gemini model to use.
         """
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        self.api_key = (
+            api_key
+            or os.environ.get("GEMINI_API_KEY")
+            or os.environ.get("GOOGLE_API_KEY")
+        )
         if not self.api_key:
             raise ValueError(
                 "Gemini API key is required. Provide it directly or set "
@@ -53,7 +57,8 @@ class GeminiClient:
                 "max_output_tokens": max_tokens,
             },
         )
-        return response.text
+        result: str = response.text  # type: ignore[assignment]
+        return result
 
 
 def converse(

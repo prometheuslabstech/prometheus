@@ -74,7 +74,7 @@ class TestGeminiClient:
 
     def test_custom_model_id(self):
         """Test client initialization with custom model ID."""
-        with patch("prometheus.services.gemini.genai") as mock_genai:
+        with patch("prometheus.services.gemini.genai"):
             client = GeminiClient(api_key="test-key", model_id="gemini-2.0-flash")
             assert client.model_id == "gemini-2.0-flash"
 

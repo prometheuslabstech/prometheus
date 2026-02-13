@@ -58,7 +58,12 @@ TEST_CASES = [
                 "quantitative tightening",
                 "hawkish",
             ],
-            "economic_indicators": ["nonfarm payrolls", "unemployment", "GDP", "inflation"],
+            "economic_indicators": [
+                "nonfarm payrolls",
+                "unemployment",
+                "GDP",
+                "inflation",
+            ],
             "market_sentiment": ["hawkish"],
         },
     },
@@ -141,7 +146,14 @@ TEST_CASES = [
         """,
         "expected": {
             "securities": [],
-            "financial_terms": ["FCF", "D/E", "short interest", "options", "ROA", "ROE"],
+            "financial_terms": [
+                "FCF",
+                "D/E",
+                "short interest",
+                "options",
+                "ROA",
+                "ROE",
+            ],
             "policy_and_regulation": [],
             "economic_indicators": [],
             "market_sentiment": [],
@@ -187,7 +199,13 @@ TEST_CASES = [
         "expected": {
             "securities": [],
             "financial_terms": [],
-            "policy_and_regulation": ["SEC", "antitrust", "regulation", "Dodd-Frank", "tariff"],
+            "policy_and_regulation": [
+                "SEC",
+                "antitrust",
+                "regulation",
+                "Dodd-Frank",
+                "tariff",
+            ],
             "economic_indicators": [],
             "market_sentiment": [],
         },
@@ -206,7 +224,14 @@ def calculate_category_score(expected: list[str], actual: list[str]) -> dict:
         Dictionary with precision, recall, f1, and match details
     """
     if not expected and not actual:
-        return {"precision": 1.0, "recall": 1.0, "f1": 1.0, "matches": [], "missing": [], "extra": []}
+        return {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "matches": [],
+            "missing": [],
+            "extra": [],
+        }
 
     expected_lower = {e.lower() for e in expected}
     actual_lower = {a.lower() for a in actual}
@@ -217,7 +242,11 @@ def calculate_category_score(expected: list[str], actual: list[str]) -> dict:
 
     precision = len(matches) / len(actual_lower) if actual_lower else 0.0
     recall = len(matches) / len(expected_lower) if expected_lower else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if (precision + recall) > 0
+        else 0.0
+    )
 
     return {
         "precision": precision,
@@ -275,16 +304,25 @@ def print_evaluation_report(test_case: dict, actual: dict, scores: dict) -> None
     print(f"Test Case: {test_case['name']}")
     print(f"{'=' * 60}")
     print(f"Input text: {test_case['text'][:100].strip()}...")
-    print(f"\nOverall Scores: P={scores['overall']['precision']:.2f} "
-          f"R={scores['overall']['recall']:.2f} F1={scores['overall']['f1']:.2f}")
+    print(
+        f"\nOverall Scores: P={scores['overall']['precision']:.2f} "
+        f"R={scores['overall']['recall']:.2f} F1={scores['overall']['f1']:.2f}"
+    )
 
-    for category in ["securities", "financial_terms", "policy_and_regulation",
-                     "economic_indicators", "market_sentiment"]:
+    for category in [
+        "securities",
+        "financial_terms",
+        "policy_and_regulation",
+        "economic_indicators",
+        "market_sentiment",
+    ]:
         cat_scores = scores[category]
         print(f"\n  {category}:")
         print(f"    Expected: {test_case['expected'].get(category, [])}")
         print(f"    Actual:   {actual.get(category, [])}")
-        print(f"    Scores:   P={cat_scores['precision']:.2f} R={cat_scores['recall']:.2f} F1={cat_scores['f1']:.2f}")
+        print(
+            f"    Scores:   P={cat_scores['precision']:.2f} R={cat_scores['recall']:.2f} F1={cat_scores['f1']:.2f}"
+        )
         if cat_scores["missing"]:
             print(f"    Missing:  {cat_scores['missing']}")
         if cat_scores["extra"]:
@@ -308,9 +346,15 @@ class TestExtractKeywordsPerformance:
     @pytest.mark.parametrize("test_case", TEST_CASES, ids=lambda tc: tc["name"])
     async def test_extraction_structure(self, test_case, mock_ctx):
         """Test that extraction returns valid JSON with required keys."""
-        mock_response = json.dumps(test_case["expected"])
+        mock_bedrock_response = {
+            "output": {
+                "message": {"content": [{"text": json.dumps(test_case["expected"])}]}
+            }
+        }
 
-        with patch("prometheus.servers.analysis.converse", return_value=mock_response):
+        with patch(
+            "prometheus.servers.analysis.converse", return_value=mock_bedrock_response
+        ):
             result = await extract_research_keywords(test_case["text"], ctx=mock_ctx)
 
         parsed = json.loads(result)
@@ -321,7 +365,7 @@ class TestExtractKeywordsPerformance:
             "economic_indicators",
             "market_sentiment",
         }
-        assert required_keys <= set(parsed.keys()), f"Missing keys in response"
+        assert required_keys <= set(parsed.keys()), "Missing keys in response"
 
     @pytest.mark.asyncio
     async def test_evaluation_framework(self, mock_ctx):

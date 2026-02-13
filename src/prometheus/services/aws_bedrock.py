@@ -11,8 +11,8 @@ def converse(
     system_prompt: str,
     model_id: str = DEFAULT_MODEL_ID,
     max_tokens: int = 1024,
-) -> str:
-    """Call Bedrock Converse API and return the response text.
+) -> dict:
+    """Call Bedrock Converse API and return the raw response.
 
     Args:
         client: Bedrock Runtime boto3 client.
@@ -22,7 +22,7 @@ def converse(
         max_tokens: Maximum tokens in the response.
 
     Returns:
-        The text content from the model response.
+        The raw response dict from the Converse API.
     """
     response = client.converse(
         modelId=model_id,
@@ -36,5 +36,4 @@ def converse(
         inferenceConfig={"maxTokens": max_tokens},
     )
 
-    result: str = response["output"]["message"]["content"][0]["text"]
-    return result
+    return dict(response)

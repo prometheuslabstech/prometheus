@@ -1,8 +1,12 @@
 {
   "mcpServers": {
     "prometheus-analysis": {
-      "command": "prometheus",
+      "command": "/Users/sl5234/Workspace/Prometheus/venv/bin/prometheus",
       "args": ["analysis"]
+    },
+    "prometheus-research": {
+      "command": "/Users/sl5234/Workspace/Prometheus/venv/bin/prometheus",
+      "args": ["research"]
     }
   }
 }
