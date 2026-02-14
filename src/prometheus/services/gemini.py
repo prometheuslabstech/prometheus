@@ -6,7 +6,7 @@ from typing import Optional
 from google import genai
 from google.genai.types import GenerateContentResponse
 
-DEFAULT_MODEL_ID = "gemini-2.0-flash"
+DEFAULT_MODEL_ID = "gemini-2.5-flash-lite"
 
 
 class GeminiClient:
