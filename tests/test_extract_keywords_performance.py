@@ -345,10 +345,16 @@ class TestExtractKeywordsPerformance:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("test_case", TEST_CASES, ids=lambda tc: tc["name"])
     async def test_extraction_structure(self, test_case, mock_ctx):
-        """Test that extraction returns valid JSON with required keys."""
+        """Test that extraction returns valid JSON matching ExtractResearchKeywordsResponse."""
+        mock_keywords = {
+            "keywords": [
+                {"security": sec, "theme": "financial", "context": f"{sec} mentioned in text"}
+                for sec in test_case["expected"].get("securities", [])
+            ]
+        }
         mock_bedrock_response = {
             "output": {
-                "message": {"content": [{"text": json.dumps(test_case["expected"])}]}
+                "message": {"content": [{"text": json.dumps(mock_keywords)}]}
             }
         }
 
@@ -358,14 +364,11 @@ class TestExtractKeywordsPerformance:
             result = await extract_research_keywords(test_case["text"], ctx=mock_ctx)
 
         parsed = json.loads(result)
-        required_keys = {
-            "securities",
-            "financial_terms",
-            "policy_and_regulation",
-            "economic_indicators",
-            "market_sentiment",
-        }
-        assert required_keys <= set(parsed.keys()), "Missing keys in response"
+        assert "keywords" in parsed, "Missing 'keywords' key in response"
+        for keyword in parsed["keywords"]:
+            assert "security" in keyword
+            assert "theme" in keyword
+            assert "context" in keyword
 
     @pytest.mark.asyncio
     async def test_evaluation_framework(self, mock_ctx):
