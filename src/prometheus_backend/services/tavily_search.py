@@ -1,8 +1,8 @@
 """Tavily web search service."""
 
-import os
-
 from tavily import TavilyClient  # type: ignore[import-untyped]
+
+from prometheus_backend.config import settings
 
 
 def search(
@@ -19,18 +19,8 @@ def search(
 
     Returns:
         Raw Tavily response dict containing search results.
-
-    Raises:
-        ValueError: If TAVILY_API_KEY environment variable is not set.
     """
-    api_key = os.environ.get("TAVILY_API_KEY")
-    if not api_key:
-        raise ValueError(
-            "TAVILY_API_KEY environment variable is not set. "
-            "Get an API key at https://tavily.com"
-        )
-
-    client = TavilyClient(api_key=api_key)
+    client = TavilyClient(api_key=settings.tavily_api_key)
     response = client.search(
         query=query,
         search_depth=search_depth,
@@ -38,3 +28,17 @@ def search(
     )
 
     return dict(response)
+
+
+def extract(url: str) -> str:
+    """Extract the full content of a webpage by URL.
+
+    Args:
+        url: The URL to extract content from.
+
+    Returns:
+        Raw markdown content of the page.
+    """
+    client = TavilyClient(api_key=settings.tavily_api_key)
+    response = client.extract(urls=url, format="markdown")
+    return response["results"][0]["raw_content"]
