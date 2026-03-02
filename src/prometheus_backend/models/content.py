@@ -42,14 +42,14 @@ class ContentItemMeta(BaseModel):
     id: str
     url: str = Field(description="Direct URL to the original content.")
     created_at: datetime = Field(description="Timestamp when this item was initialized by the system.")
+    content: str = Field(description="Full body text of the content item.")
+    source_id: str = Field(description="Identifier of the source that published this content (e.g. Reuters, Bloomberg).")
 
 
 class LLMContentItemOutput(BaseModel):
-    source_id: str = Field(description="Identifier of the source that published this content (e.g. Reuters, Bloomberg).")
     title: str = Field(description="Headline or title of the content.")
     published_at: datetime = Field(description="Timestamp when the content was originally published by the source.")
     summary: str = Field(description="Short, neutral summary of the content suitable for quick scanning.")
-    content: str = Field(description="Full body text of the content item.")
     themes: list[ContentTheme] = Field(description="List of industry sectors this content is relevant to.")
     entities: list[str] = Field(description="Named entities mentioned in the content, such as company names, tickers, or people.")
     credibility: ContentCredibility = Field(description="Assessed credibility of the source: high, medium, or low.")

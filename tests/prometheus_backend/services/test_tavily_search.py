@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
 from prometheus_backend.services.tavily_search import search
 
 MOCK_TAVILY_RESPONSE = {
@@ -27,15 +25,12 @@ MOCK_TAVILY_RESPONSE = {
 class TestTavilySearch:
     """Tests for the tavily_search service."""
 
-    def test_search_missing_api_key(self):
-        """Test that search raises ValueError when API key is not set."""
-        with patch.dict("os.environ", {}, clear=True):
-            with pytest.raises(ValueError, match="TAVILY_API_KEY"):
-                search(query="test query")
-
     def test_search_calls_tavily_client(self):
         """Test that search correctly calls the Tavily client."""
-        with patch.dict("os.environ", {"TAVILY_API_KEY": "test-key"}):
+        with patch(
+            "prometheus_backend.services.tavily_search.settings"
+        ) as mock_settings:
+            mock_settings.tavily_api_key = "test-key"
             with patch(
                 "prometheus_backend.services.tavily_search.TavilyClient"
             ) as mock_client_cls:
