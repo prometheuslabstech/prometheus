@@ -15,6 +15,15 @@ pip install -r requirements.txt
 pytest tests/
 ```
 
+### Run Integration Tests
+```bash
+export AWS_ACCESS_KEY_ID="your-access-key-id"
+export AWS_SECRET_ACCESS_KEY="your-secret-access-key"
+export AWS_DEFAULT_REGION="us-west-2"  # Optional: set default region
+
+pytest tests/ --run-integration
+```
+
 ### Check Linting
 ```bash
 flake8 src/ tests/

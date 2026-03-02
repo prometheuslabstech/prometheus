@@ -9,6 +9,7 @@ from prometheus_backend.models.content import (
     CreateContentItemResponse,
     LLMContentItemOutput,
 )
+from prometheus_backend.config import settings
 from prometheus_backend.services.gemini import GeminiClient
 from prometheus_backend.services import tavily_search
 from prometheus_backend.prompts.create_content_item_handler_prompt import (
@@ -28,7 +29,7 @@ def execute(
 
     raw_content = tavily_search.extract(request.source_url)
 
-    gemini = GeminiClient()
+    gemini = GeminiClient(api_key=settings.gemini_api_key)
     response = gemini.client.models.generate_content(
         model=gemini.model_id,
         contents=user_message(raw_content),

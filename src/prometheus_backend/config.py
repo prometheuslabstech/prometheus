@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     kms_key_arn: str = "arn:aws:kms:us-west-2:792341830430:key/f46115bb-774a-4777-ab66-29903da24381"
 
     encrypted_tavily_api_key: str = "AQICAHg7rDJp72oZrIfl2vnBxkvlcidlgcJm7juguFV/iuWU+AHpeNXM1+xDGzIOkq3hyxr0AAAAiDCBhQYJKoZIhvcNAQcGoHgwdgIBADBxBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDHVB7aMFakksi489HAIBEIBEEyuVc/n9WUT/u9P2nsnQl/h7jBidNJKmCssSymJIZFlgUTnhUyw4bvsrmUJYRcVfoXIGYdcFZRXWzxqYVZBHPYuJQDU="
+    encrypted_gemini_api_key: str = "AQICAHg7rDJp72oZrIfl2vnBxkvlcidlgcJm7juguFV/iuWU+AEV3H++a4lvm7YgbGSkh4ZoAAAAhjCBgwYJKoZIhvcNAQcGoHYwdAIBADBvBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDHFXBeKWFqtCVn6LowIBEIBC+dNo4VUUtu4Txd1SSjSOs/laMm9xuXLALC4WKe88kzuIgmaOEFpYrFCn/YkfSOjHAVEnwhPfW+lXIPKB75xErGqn"
 
     _aws_clients: Optional[AWSClients] = None
 
@@ -59,6 +60,14 @@ class Settings(BaseSettings):
         assert self._aws_clients is not None, "AWS clients must be initialized"
         return self.decrypt_value(
             self.encrypted_tavily_api_key, self._aws_clients, self.kms_key_arn
+        )
+
+    @property
+    def gemini_api_key(self) -> str:
+        """Decrypted Gemini API key."""
+        assert self._aws_clients is not None, "AWS clients must be initialized"
+        return self.decrypt_value(
+            self.encrypted_gemini_api_key, self._aws_clients, self.kms_key_arn
         )
 
 

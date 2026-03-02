@@ -17,6 +17,8 @@ from prometheus_backend.storage.local_file_system.content_item_store import (
     ContentItemStore,
 )
 
+INTEGRATION_TEST_URL = "https://www.reuters.com/world/middle-east/amazons-cloud-unit-reports-fire-after-objects-hit-uae-data-center-2026-03-01/"
+
 SOURCE_URL = "https://reuters.com/article/apple-earnings"
 RAW_CONTENT = "Apple reported record earnings this quarter."
 FIXED_ID = "abc123"
@@ -44,29 +46,32 @@ def request_():
     return CreateContentItemRequest(source_url=SOURCE_URL)
 
 
-@pytest.fixture(autouse=True)
-def mock_dependencies():
-    with (
-        patch(
-            "prometheus_backend.handlers.create_content_item_handler.UniqueIdGenerator.generate_id",
-            return_value=FIXED_ID,
-        ),
-        patch(
-            "prometheus_backend.handlers.create_content_item_handler.tavily_search.extract",
-            return_value=RAW_CONTENT,
-        ),
-        patch(
-            "prometheus_backend.handlers.create_content_item_handler.GeminiClient"
-        ) as mock_gemini_cls,
-    ):
-        mock_gemini = mock_gemini_cls.return_value
-        mock_gemini.client.models.generate_content.return_value = MagicMock(
-            text=MOCK_LLM_OUTPUT.model_dump_json()
-        )
-        yield
-
-
 class TestExecute:
+    @pytest.fixture(autouse=True)
+    def mock_dependencies(self):
+        with (
+            patch(
+                "prometheus_backend.handlers.create_content_item_handler.UniqueIdGenerator.generate_id",
+                return_value=FIXED_ID,
+            ),
+            patch(
+                "prometheus_backend.handlers.create_content_item_handler.tavily_search.extract",
+                return_value=RAW_CONTENT,
+            ),
+            patch(
+                "prometheus_backend.handlers.create_content_item_handler.settings"
+            ) as mock_settings,
+            patch(
+                "prometheus_backend.handlers.create_content_item_handler.GeminiClient"
+            ) as mock_gemini_cls,
+        ):
+            mock_settings.gemini_api_key = "test-key"
+            mock_gemini = mock_gemini_cls.return_value
+            mock_gemini.client.models.generate_content.return_value = MagicMock(
+                text=MOCK_LLM_OUTPUT.model_dump_json()
+            )
+            yield
+
     def test_returns_response_with_valid_id(self, request_, store):
         response = execute(request_, store)
         assert response.id == FIXED_ID
@@ -100,3 +105,45 @@ class TestExecute:
             mock_gemini_cls.return_value.client.models.generate_content.side_effect = RuntimeError("Gemini error")
             with pytest.raises(RuntimeError, match="Gemini error"):
                 execute(request_, store)
+
+
+@pytest.mark.integration
+class TestCreateContentItemHandlerIntegration:
+    """Integration tests for create_content_item_handler.
+
+    Run with: pytest --run-integration
+    Requires AWS credentials to be configured for KMS decryption.
+    """
+
+    @pytest.fixture(autouse=True)
+    def aws_setup(self):
+        from prometheus_backend.config import settings
+        from prometheus_backend.dagger.aws import AWSClients
+        aws_clients = AWSClients(region_name=settings.aws_region)
+        aws_clients.initialize()
+        settings.set_aws_clients(aws_clients)
+
+    @pytest.fixture
+    def integration_store(self, tmp_path):
+        return ContentItemStore(file_path=str(tmp_path / "content_items.jsonl"))
+
+    def test_execute_creates_and_saves_content_item(self, integration_store):
+        request = CreateContentItemRequest(source_url=INTEGRATION_TEST_URL)
+        response = execute(request, integration_store)
+
+        assert response.id is not None
+        assert len(response.id) > 0
+
+        item = integration_store.get(response.id)
+        assert item is not None
+        assert item.url == INTEGRATION_TEST_URL
+        assert item.source_id == "www.reuters.com"
+        assert item.title != ""
+        assert item.summary != ""
+        assert item.content != ""
+        assert len(item.themes) > 0
+        assert len(item.entities) > 0
+        assert item.credibility in ContentCredibility
+        assert item.language in ContentLanguage
+        assert item.published_at is not None
+        assert item.created_at is not None
