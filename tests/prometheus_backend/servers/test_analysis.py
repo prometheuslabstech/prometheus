@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
-from prometheus.servers.analysis import extract_research_keywords
+from prometheus_backend.servers.analysis import extract_research_keywords
 
 
 class TestExtractResearchKeywords:
@@ -27,7 +27,7 @@ class TestExtractResearchKeywords:
         }
 
         with patch(
-            "prometheus.servers.analysis.converse", return_value=mock_bedrock_response
+            "prometheus_backend.servers.analysis.converse", return_value=mock_bedrock_response
         ) as mock_converse:
             result = await extract_research_keywords(
                 "AAPL reported strong revenue growth.", ctx=mock_ctx
@@ -48,7 +48,7 @@ class TestExtractResearchKeywords:
         mock_bedrock_response = {"output": {"message": {"content": [{"text": '{"keywords": []}'}]}}}
 
         with patch(
-            "prometheus.servers.analysis.converse", return_value=mock_bedrock_response
+            "prometheus_backend.servers.analysis.converse", return_value=mock_bedrock_response
         ) as mock_converse:
             await extract_research_keywords(
                 "revenue grew 20%", additional_context="TSLA", ctx=mock_ctx
@@ -72,7 +72,7 @@ class TestExtractResearchKeywords:
         }
 
         with patch(
-            "prometheus.servers.analysis.converse", return_value=mock_bedrock_response
+            "prometheus_backend.servers.analysis.converse", return_value=mock_bedrock_response
         ):
             with pytest.raises(ValidationError):
                 await extract_research_keywords("some text", ctx=mock_ctx)

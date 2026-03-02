@@ -5,7 +5,7 @@ import logging
 
 from mcp.server.fastmcp import FastMCP
 
-from prometheus.services.tavily_search import search
+from prometheus_backend.services.tavily_search import search
 
 logger = logging.getLogger(__name__)
 

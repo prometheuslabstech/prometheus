@@ -26,7 +26,7 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
-    "--cov=prometheus",
+    "--cov=prometheus_backend",
     "--cov-report=term-missing",
     "--cov-report=html",
 ]

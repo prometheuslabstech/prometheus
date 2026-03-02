@@ -31,7 +31,7 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "prometheus=prometheus.main:main",
+            "prometheus=prometheus_backend.main:main",
         ],
     },
 )

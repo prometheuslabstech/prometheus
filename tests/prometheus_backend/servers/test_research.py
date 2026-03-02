@@ -1,12 +1,11 @@
-"""Tests for the web_search tool."""
+"""Tests for the Prometheus Research MCP server."""
 
 import json
 from unittest.mock import patch
 
 import pytest
 
-from prometheus.servers.research import web_search
-from prometheus.services.tavily_search import search
+from prometheus_backend.servers.research import web_search
 
 MOCK_TAVILY_RESPONSE = {
     "results": [
@@ -26,45 +25,14 @@ MOCK_TAVILY_RESPONSE = {
 }
 
 
-class TestTavilySearch:
-    """Tests for the tavily_search service."""
-
-    def test_search_missing_api_key(self):
-        """Test that search raises ValueError when API key is not set."""
-        with patch.dict("os.environ", {}, clear=True):
-            with pytest.raises(ValueError, match="TAVILY_API_KEY"):
-                search(query="test query")
-
-    def test_search_calls_tavily_client(self):
-        """Test that search correctly calls the Tavily client."""
-        with patch.dict("os.environ", {"TAVILY_API_KEY": "test-key"}):
-            with patch(
-                "prometheus.services.tavily_search.TavilyClient"
-            ) as mock_client_cls:
-                mock_client = mock_client_cls.return_value
-                mock_client.search.return_value = MOCK_TAVILY_RESPONSE
-
-                result = search(
-                    query="AAPL earnings", search_depth="advanced", max_results=3
-                )
-
-                mock_client_cls.assert_called_once_with(api_key="test-key")
-                mock_client.search.assert_called_once_with(
-                    query="AAPL earnings",
-                    search_depth="advanced",
-                    max_results=3,
-                )
-                assert result == MOCK_TAVILY_RESPONSE
-
-
 class TestWebSearch:
     """Tests for the web_search MCP tool."""
 
     @pytest.mark.asyncio
-    async def test_web_search_returns_formatted_results(self):
+    async def test_returns_formatted_results(self):
         """Test that web_search returns properly formatted JSON."""
         with patch(
-            "prometheus.servers.research.search", return_value=MOCK_TAVILY_RESPONSE
+            "prometheus_backend.servers.research.search", return_value=MOCK_TAVILY_RESPONSE
         ):
             result = await web_search(search_term="AAPL earnings")
 
@@ -77,10 +45,10 @@ class TestWebSearch:
         assert "objective" not in parsed
 
     @pytest.mark.asyncio
-    async def test_web_search_includes_objective(self):
+    async def test_includes_objective(self):
         """Test that objective is included in output when provided."""
         with patch(
-            "prometheus.servers.research.search", return_value=MOCK_TAVILY_RESPONSE
+            "prometheus_backend.servers.research.search", return_value=MOCK_TAVILY_RESPONSE
         ):
             result = await web_search(
                 search_term="AAPL earnings",
@@ -91,19 +59,19 @@ class TestWebSearch:
         assert parsed["objective"] == "Find latest quarterly results"
 
     @pytest.mark.asyncio
-    async def test_web_search_handles_empty_results(self):
+    async def test_handles_empty_results(self):
         """Test that web_search handles empty results gracefully."""
-        with patch("prometheus.servers.research.search", return_value={"results": []}):
+        with patch("prometheus_backend.servers.research.search", return_value={"results": []}):
             result = await web_search(search_term="obscure query")
 
         parsed = json.loads(result)
         assert parsed["results"] == []
 
     @pytest.mark.asyncio
-    async def test_web_search_strips_extra_fields(self):
+    async def test_strips_extra_fields(self):
         """Test that only title, url, and content are kept from results."""
         with patch(
-            "prometheus.servers.research.search", return_value=MOCK_TAVILY_RESPONSE
+            "prometheus_backend.servers.research.search", return_value=MOCK_TAVILY_RESPONSE
         ):
             result = await web_search(search_term="AAPL earnings")
 
@@ -112,10 +80,10 @@ class TestWebSearch:
             assert set(r.keys()) == {"title", "url", "content"}
 
     @pytest.mark.asyncio
-    async def test_web_search_propagates_api_errors(self):
+    async def test_propagates_api_errors(self):
         """Test that API errors propagate to the caller."""
         with patch(
-            "prometheus.servers.research.search",
+            "prometheus_backend.servers.research.search",
             side_effect=ValueError("TAVILY_API_KEY environment variable is not set"),
         ):
             with pytest.raises(ValueError, match="TAVILY_API_KEY"):

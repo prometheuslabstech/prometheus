@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from prometheus.services.gemini import GeminiClient, converse
-from prometheus.prompts.extract_research_keywords_prompt import (
+from prometheus_backend.services.gemini import GeminiClient, converse
+from prometheus_backend.prompts.extract_research_keywords_prompt import (
     EXTRACT_RESEARCH_KEYWORDS_PROMPT,
 )
 
@@ -17,7 +17,7 @@ class TestGeminiClient:
 
     def test_init_with_api_key(self):
         """Test client initialization with explicit API key."""
-        with patch("prometheus.services.gemini.genai") as mock_genai:
+        with patch("prometheus_backend.services.gemini.genai") as mock_genai:
             client = GeminiClient(api_key="test-key")
             mock_genai.Client.assert_called_once_with(api_key="test-key")
             assert client.api_key == "test-key"
@@ -26,7 +26,7 @@ class TestGeminiClient:
     def test_init_with_env_var(self):
         """Test client initialization with environment variable."""
         with patch.dict(os.environ, {"GEMINI_API_KEY": "env-key"}, clear=False):
-            with patch("prometheus.services.gemini.genai") as mock_genai:
+            with patch("prometheus_backend.services.gemini.genai") as mock_genai:
                 client = GeminiClient()
                 mock_genai.Client.assert_called_once_with(api_key="env-key")
                 assert client.api_key == "env-key"
@@ -39,7 +39,7 @@ class TestGeminiClient:
             env.pop("GEMINI_API_KEY", None)
             env["GOOGLE_API_KEY"] = "google-key"
             with patch.dict(os.environ, env, clear=True):
-                with patch("prometheus.services.gemini.genai") as mock_genai:
+                with patch("prometheus_backend.services.gemini.genai") as mock_genai:
                     client = GeminiClient()
                     mock_genai.Client.assert_called_once_with(api_key="google-key")
                     assert client.api_key == "google-key"
@@ -52,7 +52,7 @@ class TestGeminiClient:
 
     def test_converse(self):
         """Test the converse method."""
-        with patch("prometheus.services.gemini.genai") as mock_genai:
+        with patch("prometheus_backend.services.gemini.genai") as mock_genai:
             mock_response = MagicMock()
             mock_response.text = "Test response"
             mock_client_instance = MagicMock()
@@ -78,7 +78,7 @@ class TestGeminiClient:
 
     def test_custom_model_id(self):
         """Test client initialization with custom model ID."""
-        with patch("prometheus.services.gemini.genai"):
+        with patch("prometheus_backend.services.gemini.genai"):
             client = GeminiClient(api_key="test-key", model_id="gemini-2.5-flash-lite")
             assert client.model_id == "gemini-2.5-flash-lite"
 

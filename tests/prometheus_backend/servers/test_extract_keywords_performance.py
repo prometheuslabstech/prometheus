@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from prometheus.servers.analysis import extract_research_keywords
+from prometheus_backend.servers.analysis import extract_research_keywords
 
 # Test data for extract_research_keywords performance evaluation
 TEST_CASES = [
@@ -359,7 +359,7 @@ class TestExtractKeywordsPerformance:
         }
 
         with patch(
-            "prometheus.servers.analysis.converse", return_value=mock_bedrock_response
+            "prometheus_backend.servers.analysis.converse", return_value=mock_bedrock_response
         ):
             result = await extract_research_keywords(test_case["text"], ctx=mock_ctx)
 
@@ -410,9 +410,9 @@ async def run_performance_evaluation():
     This function is for manual testing and requires AWS credentials.
     Run with: python -c "import asyncio; from tests.test_extract_keywords_performance import run_performance_evaluation; asyncio.run(run_performance_evaluation())"
     """
-    from prometheus.dagger.aws import AWSClients
-    from prometheus.services.aws_bedrock import converse
-    from prometheus.prompts.extract_research_keywords_prompt import (
+    from prometheus_backend.dagger.aws import AWSClients
+    from prometheus_backend.services.aws_bedrock import converse
+    from prometheus_backend.prompts.extract_research_keywords_prompt import (
         EXTRACT_RESEARCH_KEYWORDS_PROMPT,
     )
 

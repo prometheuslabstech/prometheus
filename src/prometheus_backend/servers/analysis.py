@@ -5,16 +5,16 @@ from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from prometheus.dagger.aws import AWSClients
-from prometheus.prompts.extract_research_keywords_prompt import (
+from prometheus_backend.dagger.aws import AWSClients
+from prometheus_backend.prompts.extract_research_keywords_prompt import (
     EXTRACT_RESEARCH_KEYWORDS_PROMPT,
 )
-from prometheus.prompts.generate_research_plan_prompt import (
+from prometheus_backend.prompts.generate_research_plan_prompt import (
     GENERATE_RESEARCH_PLAN_PROMPT,
 )
-from prometheus.models.extract_research_keywords import ExtractResearchKeywordsResponse
-from prometheus.services.aws_bedrock import converse
-from prometheus.services.helpers.aws_bedrock_helper import parse_converse_response
+from prometheus_backend.models.extract_research_keywords import ExtractResearchKeywordsResponse
+from prometheus_backend.services.aws_bedrock import converse
+from prometheus_backend.services.helpers.aws_bedrock_helper import parse_converse_response
 
 logger = logging.getLogger(__name__)
 
