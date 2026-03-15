@@ -21,6 +21,9 @@ from prometheus_backend.storage.local_file_system.content_item_store import (
 )
 
 
+_MAX_ANALYSIS_CHARS = 20_000
+
+
 def execute(
     request: CreateContentItemRequest,
     store: ContentItemStore,
@@ -32,7 +35,7 @@ def execute(
     gemini = GeminiClient(api_key=settings.gemini_api_key)
     response = gemini.client.models.generate_content(
         model=gemini.model_id,
-        contents=user_message(raw_content),
+        contents=user_message(raw_content[:_MAX_ANALYSIS_CHARS]),
         config={
             "system_instruction": SYSTEM_INSTRUCTION,
             "response_mime_type": "application/json",

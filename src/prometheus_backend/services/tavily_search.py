@@ -41,4 +41,8 @@ def extract(url: str) -> str:
     """
     client = TavilyClient(api_key=settings.tavily_api_key)
     response = client.extract(urls=url, format="markdown")
+    if not response["results"]:
+        failed = response.get("failed_results", [])
+        reason = failed[0].get("error", "unknown error") if failed else "unknown error"
+        raise RuntimeError(f"Tavily could not extract content from {url}: {reason}")
     return response["results"][0]["raw_content"]

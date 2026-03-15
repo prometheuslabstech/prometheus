@@ -2,9 +2,11 @@ from pathlib import Path
 
 from prometheus_backend.models.content import ContentItem
 
+DEFAULT_FILE_PATH = Path(__file__).parent.parent.parent.parent / "data" / "content_items.jsonl"
+
 
 class ContentItemStore:
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str | Path = DEFAULT_FILE_PATH):
         self.file_path = Path(file_path)
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
 
