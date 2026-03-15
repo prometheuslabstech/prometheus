@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 
-class ContentHashRepository(ABC):
+class HashRepository(ABC):
     """Abstract repository for storing and querying seen content hashes."""
 
     @abstractmethod
@@ -16,8 +16,8 @@ class ContentHashRepository(ABC):
         ...
 
 
-class LocalContentHashRepository(ContentHashRepository):
-    """Flat-file implementation of ContentHashRepository.
+class LocalHashRepository(HashRepository):
+    """Flat-file implementation of HashRepository.
 
     Stores one SHA-256 hash per line in a local text file.
     Loads all hashes into memory on init for fast lookup.

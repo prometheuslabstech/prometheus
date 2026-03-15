@@ -1,8 +1,8 @@
-"""Integration tests: full deduplication round-trip using LocalContentHashRepository."""
+"""Integration tests: full deduplication round-trip using LocalHashRepository."""
 from datetime import datetime
 
 from prometheus_backend.deduplication.deduplicator import Deduplicator, compute_hash
-from prometheus_backend.deduplication.hash_repository import LocalContentHashRepository
+from prometheus_backend.storage.hash_repository import LocalHashRepository
 from prometheus_backend.news_ingestion.models import RawNewsItem
 
 
@@ -18,7 +18,7 @@ def make_item(title: str, raw_content: str) -> RawNewsItem:
 
 def test_two_distinct_items_and_one_duplicate(tmp_path):
     hash_file = tmp_path / "content_hashes.txt"
-    repo = LocalContentHashRepository(str(hash_file))
+    repo = LocalHashRepository(str(hash_file))
     dedup = Deduplicator(repo)
 
     item_a = make_item("Fed raises rates", "The Federal Reserve raised interest rates by 25bps.")
@@ -44,7 +44,7 @@ def test_two_distinct_items_and_one_duplicate(tmp_path):
 
 def test_hash_file_contains_exactly_two_hashes(tmp_path):
     hash_file = tmp_path / "content_hashes.txt"
-    repo = LocalContentHashRepository(str(hash_file))
+    repo = LocalHashRepository(str(hash_file))
     dedup = Deduplicator(repo)
 
     item_a = make_item("Story one", "Content one")
@@ -64,19 +64,19 @@ def test_state_restored_after_reinitialisation(tmp_path):
     item = make_item("Persistent story", "Some content that was processed.")
 
     # First run: process the item
-    repo1 = LocalContentHashRepository(str(hash_file))
+    repo1 = LocalHashRepository(str(hash_file))
     dedup1 = Deduplicator(repo1)
     dedup1.mark_seen(item)
 
     # Second run: new instances, same file
-    repo2 = LocalContentHashRepository(str(hash_file))
+    repo2 = LocalHashRepository(str(hash_file))
     dedup2 = Deduplicator(repo2)
     assert dedup2.is_duplicate(item) is True
 
 
 def test_mark_seen_not_called_on_duplicate_leaves_file_unchanged(tmp_path):
     hash_file = tmp_path / "content_hashes.txt"
-    repo = LocalContentHashRepository(str(hash_file))
+    repo = LocalHashRepository(str(hash_file))
     dedup = Deduplicator(repo)
 
     item = make_item("Some title", "Some content")

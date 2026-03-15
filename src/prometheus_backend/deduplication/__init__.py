@@ -1,12 +1,12 @@
-from prometheus_backend.deduplication.hash_repository import (
-    ContentHashRepository,
-    LocalContentHashRepository,
+from prometheus_backend.storage.hash_repository import (
+    HashRepository,
+    LocalHashRepository,
 )
 from prometheus_backend.deduplication.deduplicator import Deduplicator, compute_hash
 
 __all__ = [
-    "ContentHashRepository",
-    "LocalContentHashRepository",
+    "HashRepository",
+    "LocalHashRepository",
     "Deduplicator",
     "compute_hash",
 ]

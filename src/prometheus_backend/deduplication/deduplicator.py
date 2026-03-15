@@ -1,7 +1,7 @@
 import hashlib
 import re
 
-from prometheus_backend.deduplication.hash_repository import ContentHashRepository
+from prometheus_backend.storage.hash_repository import HashRepository
 from prometheus_backend.news_ingestion.models import RawNewsItem
 
 
@@ -19,7 +19,7 @@ def compute_hash(item: RawNewsItem) -> str:
 class Deduplicator:
     """Checks and records seen content hashes to prevent duplicate processing."""
 
-    def __init__(self, repo: ContentHashRepository) -> None:
+    def __init__(self, repo: HashRepository) -> None:
         self._repo = repo
 
     def is_duplicate(self, item: RawNewsItem) -> bool:

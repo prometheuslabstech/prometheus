@@ -53,6 +53,6 @@ def execute(
         **llm_output.model_dump(exclude={"source_id"}),
     )
 
-    store.save(content_item)
+    store.put(content_item)
 
     return CreateContentItemResponse(id=content_item.id)
