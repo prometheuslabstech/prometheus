@@ -3,7 +3,7 @@
 import pytest
 from pydantic import BaseModel
 
-from prometheus_backend.storage.base import LocalJsonlRepository, Repository
+from prometheus_backend.storage.repository_base import LocalJsonlRepository, Repository
 
 
 class Item(BaseModel):

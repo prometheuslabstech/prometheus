@@ -2,7 +2,7 @@
 from datetime import datetime
 
 from prometheus_backend.deduplication.deduplicator import Deduplicator, compute_hash
-from prometheus_backend.storage.hash_repository import LocalHashRepository
+from prometheus_backend.storage.hash_repository_base import LocalHashRepository
 from prometheus_backend.news_ingestion.models import RawNewsItem
 
 

@@ -1,7 +1,7 @@
 import hashlib
 import re
 
-from prometheus_backend.storage.hash_repository import HashRepository
+from prometheus_backend.storage.hash_repository_base import HashRepository
 from prometheus_backend.news_ingestion.models import RawNewsItem
 
 

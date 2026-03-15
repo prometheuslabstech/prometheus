@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from prometheus_backend.models.content import ContentItem
-from prometheus_backend.storage.base import LocalJsonlRepository
+from prometheus_backend.storage.repository_base import LocalJsonlRepository
 
 DEFAULT_FILE_PATH = Path(__file__).parent.parent.parent.parent / "data" / "content_items.jsonl"
 

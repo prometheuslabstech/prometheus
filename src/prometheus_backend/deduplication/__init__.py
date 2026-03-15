@@ -1,4 +1,4 @@
-from prometheus_backend.storage.hash_repository import (
+from prometheus_backend.storage.hash_repository_base import (
     HashRepository,
     LocalHashRepository,
 )

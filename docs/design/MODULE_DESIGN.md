@@ -61,6 +61,7 @@ Weekly digest cycle is triggered separately by `PipelineScheduler` on a per-user
 @dataclass
 class RawNewsItem:
     url: str
+    title: str
     source_id: str          # identifies which NewsSource produced this
     raw_content: str        # full text content
     fetched_at: datetime
@@ -98,16 +99,18 @@ NewsSource (abstract)
 #### Interface
 
 ```python
-class ContentHashRepository(ABC):
+# storage/hash_repository_base.py
+class HashRepository(ABC):
     def contains(self, hash: str) -> bool: ...
     def add(self, hash: str) -> None: ...
 
-class LocalContentHashRepository(ContentHashRepository):
+class LocalHashRepository(HashRepository):
     # Backed by a local flat file (one hash per line)
     ...
 
+# deduplication/deduplicator.py
 class Deduplicator:
-    def __init__(self, repo: ContentHashRepository): ...
+    def __init__(self, repo: HashRepository): ...
     def is_duplicate(self, item: RawNewsItem) -> bool: ...
     def mark_seen(self, item: RawNewsItem) -> None: ...
 ```
@@ -268,12 +271,13 @@ class UserProfile:
 #### Storage
 
 ```python
-class UserProfileRepository(ABC):
-    def save(self, profile: UserProfile) -> None: ...
+class UserProfileRepository(Repository[UserProfile]):
+    def put(self, profile: UserProfile) -> None: ...
     def get(self, user_id: str) -> Optional[UserProfile]: ...
     def list(self) -> List[UserProfile]: ...
+    def delete(self, user_id: str) -> None: ...
 
-class LocalUserProfileRepository(UserProfileRepository):
+class LocalUserProfileRepository(LocalJsonlRepository[UserProfile]):
     # Backed by JSONL file, same pattern as ContentItemStore
     ...
 ```
@@ -379,11 +383,14 @@ class FeedbackRecord:
 #### Interfaces
 
 ```python
-class FeedbackRepository(ABC):
-    def save(self, record: FeedbackRecord) -> None: ...
+class FeedbackRepository(Repository[FeedbackRecord]):
+    def put(self, record: FeedbackRecord) -> None: ...
+    def get(self, id: str) -> Optional[FeedbackRecord]: ...
+    def list(self) -> List[FeedbackRecord]: ...
     def list_by_user(self, user_id: str) -> List[FeedbackRecord]: ...
+    def delete(self, id: str) -> None: ...
 
-class LocalFeedbackRepository(FeedbackRepository):
+class LocalFeedbackRepository(LocalJsonlRepository[FeedbackRecord]):
     # Backed by JSONL file
     ...
 
@@ -463,8 +470,7 @@ src/prometheus_backend/
   │       └── rss_source.py
   ├── deduplication/
   │   ├── __init__.py
-  │   ├── deduplicator.py            # Deduplicator
-  │   └── hash_repository.py        # ContentHashRepository + LocalContentHashRepository
+  │   └── deduplicator.py            # Deduplicator, compute_hash
   ├── content_processing/
   │   ├── __init__.py
   │   └── processor.py              # ContentProcessor (wraps existing handler)
@@ -477,7 +483,7 @@ src/prometheus_backend/
   ├── user_profile/
   │   ├── __init__.py
   │   ├── models.py                  # UserProfile, NotificationPreferences
-  │   └── repository.py             # UserProfileRepository + LocalUserProfileRepository
+  │   └── repository.py             # UserProfileRepository(Repository[UserProfile]) + LocalUserProfileRepository(LocalJsonlRepository[UserProfile])
   ├── notification/
   │   ├── __init__.py
   │   ├── models.py                  # Notification
@@ -494,13 +500,14 @@ src/prometheus_backend/
   │   ├── models.py                  # FeedbackRecord, InterruptionValue, FailureReason
   │   ├── collector.py               # FeedbackCollector
   │   ├── signal_mapper.py           # FeedbackSignalMapper
-  │   └── repository.py             # FeedbackRepository + LocalFeedbackRepository
+  │   └── repository.py             # FeedbackRepository(Repository[FeedbackRecord]) + LocalFeedbackRepository(LocalJsonlRepository[FeedbackRecord])
   ├── storage/
   │   ├── __init__.py
-  │   ├── base.py                    # Repository[T] (abstract)
+  │   ├── repository_base.py         # Repository[T] (abstract) + LocalJsonlRepository[M]
+  │   ├── hash_repository_base.py    # HashRepository (abstract) + LocalHashRepository
   │   └── local_file_system/
   │       ├── __init__.py
-  │       └── content_item_store.py  # existing (conforms to Repository[T])
+  │       └── content_item_store.py  # ContentItemStore(LocalJsonlRepository[ContentItem])
   └── scheduler/
       ├── __init__.py
       └── pipeline_scheduler.py     # PipelineScheduler entry point
@@ -543,9 +550,16 @@ No circular dependencies. `user_profile` and `feed_evaluation.models` are the sh
 
 ## Implementation Order (Suggested)
 
-1. `storage/base.py` — `Repository[T]` abstract (foundation for all stores)
-2. `deduplication` — simplest new module, no external dependencies
-3. `news_ingestion` — sources abstraction + Tavily source
+1. ~~`storage/repository_base.py` — `Repository[T]` + `LocalJsonlRepository[M]` (foundation for all stores)~~ **done**
+2. ~~`deduplication` — `Deduplicator` + `HashRepository` / `LocalHashRepository`~~ **done**
+3. ~~`news_ingestion/models.py` — `RawNewsItem`~~ **done** (sources abstraction still pending)
+4. `news_ingestion/sources/` — `NewsSource` abstract + `TavilyNewsSource` + `RSSNewsSource`
+5. `content_processing` — wire existing handler into pipeline interface
+6. `user_profile` — needed before evaluation can run
+7. `feed_evaluation` — core differentiator, depends on user_profile
+8. `scheduler` — wires 1–7 together into a runnable cycle
+9. `notification` — Email + SMS delivery
+10. `feedback` — closes the loop with evaluator config tuning
 4. `content_processing` — wire existing handler into pipeline interface
 5. `user_profile` — needed before evaluation can run
 6. `feed_evaluation` — core differentiator, depends on user_profile
