@@ -37,20 +37,20 @@ def store(tmp_path):
     return ContentItemStore(file_path=str(tmp_path / "content_items.jsonl"))
 
 
-class TestSave:
+class TestPut:
     def test_appends_new_item_when_file_does_not_exist(self, store):
         item = make_item("abc")
-        store.save(item)
+        store.put(item)
         assert store.get("abc") == item
 
     def test_appends_new_item_when_file_has_other_items(self, store):
-        store.save(make_item("abc"))
-        store.save(make_item("def"))
+        store.put(make_item("abc"))
+        store.put(make_item("def"))
         assert len(store.list()) == 2
 
     def test_updates_existing_item_without_creating_duplicate(self, store):
-        store.save(make_item("abc", title="Original"))
-        store.save(make_item("abc", title="Updated"))
+        store.put(make_item("abc", title="Original"))
+        store.put(make_item("abc", title="Updated"))
         items = store.list()
         assert len(items) == 1
         assert items[0].title == "Updated"
@@ -59,11 +59,11 @@ class TestSave:
 class TestGet:
     def test_returns_correct_item_by_id(self, store):
         item = make_item("abc")
-        store.save(item)
+        store.put(item)
         assert store.get("abc") == item
 
     def test_returns_none_when_id_does_not_exist(self, store):
-        store.save(make_item("abc"))
+        store.put(make_item("abc"))
         assert store.get("xyz") is None
 
     def test_returns_none_when_file_does_not_exist(self, store):
@@ -72,8 +72,8 @@ class TestGet:
 
 class TestList:
     def test_returns_all_items(self, store):
-        store.save(make_item("abc"))
-        store.save(make_item("def"))
+        store.put(make_item("abc"))
+        store.put(make_item("def"))
         assert len(store.list()) == 2
 
     def test_returns_empty_list_when_file_does_not_exist(self, store):
@@ -86,15 +86,15 @@ class TestList:
 
 class TestDelete:
     def test_removes_correct_item_leaving_others_intact(self, store):
-        store.save(make_item("abc"))
-        store.save(make_item("def"))
+        store.put(make_item("abc"))
+        store.put(make_item("def"))
         store.delete("abc")
         items = store.list()
         assert len(items) == 1
         assert items[0].id == "def"
 
     def test_is_noop_when_id_does_not_exist(self, store):
-        store.save(make_item("abc"))
+        store.put(make_item("abc"))
         store.delete("xyz")
         assert len(store.list()) == 1
 
