@@ -1,23 +1,30 @@
 from datetime import datetime
 from unittest.mock import MagicMock
 
-import pytest
-
 from prometheus_backend.deduplication.deduplicator import Deduplicator, compute_hash
-from prometheus_backend.news_ingestion.models import RawNewsItem
+from prometheus_backend.news_aggregator.models.news_item import NewsItem
 
 
-def make_item(title: str = "Test Title", raw_content: str = "Test content") -> RawNewsItem:
-    return RawNewsItem(
-        url="https://example.com",
+def make_item(
+    title: str = "Test Title",
+    raw_content: str = "Test content",
+    url: str = "https://example.com/article",
+) -> NewsItem:
+    from datetime import timezone
+    from prometheus_backend.news_aggregator.models.news_item import NewsItemStatus
+
+    return NewsItem(
+        url=url,
         title=title,
         source_id="test-source",
+        status=NewsItemStatus.FETCHED,
         raw_content=raw_content,
-        fetched_at=datetime(2026, 1, 1),
+        creation_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
 
 
 # --- compute_hash ---
+
 
 def test_hash_is_hex_string():
     item = make_item()
@@ -56,6 +63,7 @@ def test_normalization_newlines():
 
 
 # --- Deduplicator ---
+
 
 def test_is_duplicate_returns_false_for_new_item():
     repo = MagicMock()

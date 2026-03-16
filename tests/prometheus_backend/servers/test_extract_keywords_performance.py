@@ -348,18 +348,21 @@ class TestExtractKeywordsPerformance:
         """Test that extraction returns valid JSON matching ExtractResearchKeywordsResponse."""
         mock_keywords = {
             "keywords": [
-                {"security": sec, "theme": "financial", "context": f"{sec} mentioned in text"}
+                {
+                    "security": sec,
+                    "theme": "financial",
+                    "context": f"{sec} mentioned in text",
+                }
                 for sec in test_case["expected"].get("securities", [])
             ]
         }
         mock_bedrock_response = {
-            "output": {
-                "message": {"content": [{"text": json.dumps(mock_keywords)}]}
-            }
+            "output": {"message": {"content": [{"text": json.dumps(mock_keywords)}]}}
         }
 
         with patch(
-            "prometheus_backend.servers.analysis.converse", return_value=mock_bedrock_response
+            "prometheus_backend.servers.analysis.converse",
+            return_value=mock_bedrock_response,
         ):
             result = await extract_research_keywords(test_case["text"], ctx=mock_ctx)
 

@@ -32,7 +32,8 @@ class TestWebSearch:
     async def test_returns_formatted_results(self):
         """Test that web_search returns properly formatted JSON."""
         with patch(
-            "prometheus_backend.servers.research.search", return_value=MOCK_TAVILY_RESPONSE
+            "prometheus_backend.servers.research.search",
+            return_value=MOCK_TAVILY_RESPONSE,
         ):
             result = await web_search(search_term="AAPL earnings")
 
@@ -48,7 +49,8 @@ class TestWebSearch:
     async def test_includes_objective(self):
         """Test that objective is included in output when provided."""
         with patch(
-            "prometheus_backend.servers.research.search", return_value=MOCK_TAVILY_RESPONSE
+            "prometheus_backend.servers.research.search",
+            return_value=MOCK_TAVILY_RESPONSE,
         ):
             result = await web_search(
                 search_term="AAPL earnings",
@@ -61,7 +63,9 @@ class TestWebSearch:
     @pytest.mark.asyncio
     async def test_handles_empty_results(self):
         """Test that web_search handles empty results gracefully."""
-        with patch("prometheus_backend.servers.research.search", return_value={"results": []}):
+        with patch(
+            "prometheus_backend.servers.research.search", return_value={"results": []}
+        ):
             result = await web_search(search_term="obscure query")
 
         parsed = json.loads(result)
@@ -71,7 +75,8 @@ class TestWebSearch:
     async def test_strips_extra_fields(self):
         """Test that only title, url, and content are kept from results."""
         with patch(
-            "prometheus_backend.servers.research.search", return_value=MOCK_TAVILY_RESPONSE
+            "prometheus_backend.servers.research.search",
+            return_value=MOCK_TAVILY_RESPONSE,
         ):
             result = await web_search(search_term="AAPL earnings")
 

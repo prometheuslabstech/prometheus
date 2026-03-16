@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field
 class ResearchKeyword(BaseModel):
     security: str = Field(description="Full company name or security identifier")
     theme: str = Field(description="Industry theme or topic")
-    context: str = Field(description="Brief explanation of why this security-theme pair is relevant")
+    context: str = Field(
+        description="Brief explanation of why this security-theme pair is relevant"
+    )
 
 
 class ExtractResearchKeywordsResponse(BaseModel):

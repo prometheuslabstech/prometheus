@@ -206,7 +206,9 @@ class TestGeminiIntegration:
             "economic_indicators",
             "market_sentiment",
         }
-        assert required_keys <= set(parsed.keys()), f"Missing keys: {required_keys - set(parsed.keys())}"
+        assert required_keys <= set(
+            parsed.keys()
+        ), f"Missing keys: {required_keys - set(parsed.keys())}"
 
         # Each value should be a list
         for key in required_keys:
