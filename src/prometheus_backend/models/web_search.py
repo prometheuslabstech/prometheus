@@ -11,4 +11,6 @@ class WebSearchResult(BaseModel):
 
 class WebSearchResponse(BaseModel):
     query: str = Field(description="The search query executed")
-    results: list[WebSearchResult] = Field(default_factory=list, description="Search results returned")
+    results: list[WebSearchResult] = Field(
+        default_factory=list, description="Search results returned"
+    )

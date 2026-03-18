@@ -103,7 +103,9 @@ class TestExecute:
         with patch(
             "prometheus_backend.handlers.create_content_item_handler.GeminiClient"
         ) as mock_gemini_cls:
-            mock_gemini_cls.return_value.client.models.generate_content.side_effect = RuntimeError("Gemini error")
+            mock_gemini_cls.return_value.client.models.generate_content.side_effect = (
+                RuntimeError("Gemini error")
+            )
             with pytest.raises(RuntimeError, match="Gemini error"):
                 execute(request_, store)
 
@@ -120,6 +122,7 @@ class TestCreateContentItemHandlerIntegration:
     def aws_setup(self):
         from prometheus_backend.config import settings
         from prometheus_backend.dagger.aws import AWSClients
+
         aws_clients = AWSClients(region_name=settings.aws_region)
         aws_clients.initialize()
         settings.set_aws_clients(aws_clients)

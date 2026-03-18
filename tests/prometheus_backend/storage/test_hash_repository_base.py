@@ -1,4 +1,3 @@
-import pytest
 from prometheus_backend.storage.hash_repository_base import (
     HashRepository,
     LocalHashRepository,
@@ -48,7 +47,7 @@ def test_add_is_idempotent(tmp_path):
     repo = LocalHashRepository(str(path))
     repo.add("abc123")
     repo.add("abc123")
-    lines = [l for l in path.read_text().splitlines() if l]
+    lines = [line for line in path.read_text().splitlines() if line]
     assert lines.count("abc123") == 1
 
 

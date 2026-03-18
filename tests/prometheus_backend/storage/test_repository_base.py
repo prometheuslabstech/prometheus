@@ -9,6 +9,7 @@ from prometheus_backend.storage.repository_base import LocalJsonlRepository, Rep
 class Item(BaseModel):
     id: str
     value: str = "default"
+    status: str = "active"
 
 
 @pytest.fixture
@@ -20,6 +21,7 @@ def repo(tmp_path):
 # Repository ABC
 # ---------------------------------------------------------------------------
 
+
 class TestRepositoryABC:
     def test_cannot_instantiate_without_implementing_abstract_methods(self):
         with pytest.raises(TypeError):
@@ -29,6 +31,7 @@ class TestRepositoryABC:
 # ---------------------------------------------------------------------------
 # LocalJsonlRepository — put
 # ---------------------------------------------------------------------------
+
 
 class TestPut:
     def test_inserts_when_file_does_not_exist(self, repo):
@@ -52,6 +55,7 @@ class TestPut:
 # LocalJsonlRepository — get
 # ---------------------------------------------------------------------------
 
+
 class TestGet:
     def test_returns_correct_item_by_id(self, repo):
         item = Item(id="a")
@@ -70,6 +74,7 @@ class TestGet:
 # LocalJsonlRepository — list
 # ---------------------------------------------------------------------------
 
+
 class TestList:
     def test_returns_all_items(self, repo):
         repo.put(Item(id="a"))
@@ -83,10 +88,30 @@ class TestList:
         repo.file_path.write_text("")
         assert repo.list() == []
 
+    def test_filter_by_single_field(self, repo):
+        repo.put(Item(id="a", status="active"))
+        repo.put(Item(id="b", status="inactive"))
+        results = repo.list(status="active")
+        assert len(results) == 1
+        assert results[0].id == "a"
+
+    def test_filter_by_multiple_fields(self, repo):
+        repo.put(Item(id="a", value="x", status="active"))
+        repo.put(Item(id="b", value="x", status="inactive"))
+        repo.put(Item(id="c", value="y", status="active"))
+        results = repo.list(value="x", status="active")
+        assert len(results) == 1
+        assert results[0].id == "a"
+
+    def test_filter_returns_empty_when_no_match(self, repo):
+        repo.put(Item(id="a", status="active"))
+        assert repo.list(status="unknown") == []
+
 
 # ---------------------------------------------------------------------------
 # LocalJsonlRepository — delete
 # ---------------------------------------------------------------------------
+
 
 class TestDelete:
     def test_removes_correct_item_leaving_others_intact(self, repo):
@@ -110,8 +135,9 @@ class TestDelete:
 # LocalJsonlRepository — __init__
 # ---------------------------------------------------------------------------
 
+
 class TestInit:
     def test_creates_parent_directory_if_missing(self, tmp_path):
         nested = tmp_path / "a" / "b" / "c" / "items.jsonl"
-        repo = LocalJsonlRepository(Item, nested)
+        LocalJsonlRepository(Item, nested)
         assert nested.parent.exists()

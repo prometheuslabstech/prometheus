@@ -12,9 +12,13 @@ from prometheus_backend.prompts.extract_research_keywords_prompt import (
 from prometheus_backend.prompts.generate_research_plan_prompt import (
     GENERATE_RESEARCH_PLAN_PROMPT,
 )
-from prometheus_backend.models.extract_research_keywords import ExtractResearchKeywordsResponse
+from prometheus_backend.models.extract_research_keywords import (
+    ExtractResearchKeywordsResponse,
+)
 from prometheus_backend.services.aws_bedrock import converse
-from prometheus_backend.services.helpers.aws_bedrock_helper import parse_converse_response
+from prometheus_backend.services.helpers.aws_bedrock_helper import (
+    parse_converse_response,
+)
 
 logger = logging.getLogger(__name__)
 

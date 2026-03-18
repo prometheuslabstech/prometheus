@@ -17,10 +17,16 @@ class Settings(BaseSettings):
 
     # AWS
     aws_region: str = "us-west-2"
-    kms_key_arn: str = "arn:aws:kms:us-west-2:792341830430:key/f46115bb-774a-4777-ab66-29903da24381"
+    kms_key_arn: str = (
+        "arn:aws:kms:us-west-2:792341830430:key/f46115bb-774a-4777-ab66-29903da24381"
+    )
 
-    encrypted_tavily_api_key: str = "AQICAHg7rDJp72oZrIfl2vnBxkvlcidlgcJm7juguFV/iuWU+AHpeNXM1+xDGzIOkq3hyxr0AAAAiDCBhQYJKoZIhvcNAQcGoHgwdgIBADBxBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDHVB7aMFakksi489HAIBEIBEEyuVc/n9WUT/u9P2nsnQl/h7jBidNJKmCssSymJIZFlgUTnhUyw4bvsrmUJYRcVfoXIGYdcFZRXWzxqYVZBHPYuJQDU="
-    encrypted_gemini_api_key: str = "AQICAHg7rDJp72oZrIfl2vnBxkvlcidlgcJm7juguFV/iuWU+AEV3H++a4lvm7YgbGSkh4ZoAAAAhjCBgwYJKoZIhvcNAQcGoHYwdAIBADBvBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDHFXBeKWFqtCVn6LowIBEIBC+dNo4VUUtu4Txd1SSjSOs/laMm9xuXLALC4WKe88kzuIgmaOEFpYrFCn/YkfSOjHAVEnwhPfW+lXIPKB75xErGqn"
+    encrypted_tavily_api_key: str = (
+        "AQICAHg7rDJp72oZrIfl2vnBxkvlcidlgcJm7juguFV/iuWU+AHpeNXM1+xDGzIOkq3hyxr0AAAAiDCBhQYJKoZIhvcNAQcGoHgwdgIBADBxBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDHVB7aMFakksi489HAIBEIBEEyuVc/n9WUT/u9P2nsnQl/h7jBidNJKmCssSymJIZFlgUTnhUyw4bvsrmUJYRcVfoXIGYdcFZRXWzxqYVZBHPYuJQDU="
+    )
+    encrypted_gemini_api_key: str = (
+        "AQICAHg7rDJp72oZrIfl2vnBxkvlcidlgcJm7juguFV/iuWU+AEV3H++a4lvm7YgbGSkh4ZoAAAAhjCBgwYJKoZIhvcNAQcGoHYwdAIBADBvBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDHFXBeKWFqtCVn6LowIBEIBC+dNo4VUUtu4Txd1SSjSOs/laMm9xuXLALC4WKe88kzuIgmaOEFpYrFCn/YkfSOjHAVEnwhPfW+lXIPKB75xErGqn"
+    )
 
     _aws_clients: Optional[AWSClients] = None
 
@@ -35,7 +41,9 @@ class Settings(BaseSettings):
         self._aws_clients = aws_clients
 
     @staticmethod
-    def decrypt_value(encrypted_value: str, aws_clients: AWSClients, kms_key_arn: str) -> str:
+    def decrypt_value(
+        encrypted_value: str, aws_clients: AWSClients, kms_key_arn: str
+    ) -> str:
         """
         Decrypt a value using AWS KMS via KMSEncryptor from appdevcommons.
 
@@ -52,7 +60,7 @@ class Settings(BaseSettings):
         plaintext_bytes = KMSEncryptor.decrypt(
             ciphertext=ciphertext_blob, kms_key_arn=kms_key_arn, kms_client=kms_client
         )
-        return plaintext_bytes.decode("utf-8")
+        return str(plaintext_bytes.decode("utf-8"))
 
     @property
     def tavily_api_key(self) -> str:

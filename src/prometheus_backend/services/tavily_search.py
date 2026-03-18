@@ -45,4 +45,4 @@ def extract(url: str) -> str:
         failed = response.get("failed_results", [])
         reason = failed[0].get("error", "unknown error") if failed else "unknown error"
         raise RuntimeError(f"Tavily could not extract content from {url}: {reason}")
-    return response["results"][0]["raw_content"]
+    return str(response["results"][0]["raw_content"])

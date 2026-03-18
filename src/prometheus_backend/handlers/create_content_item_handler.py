@@ -20,7 +20,6 @@ from prometheus_backend.storage.local_file_system.content_item_store import (
     ContentItemStore,
 )
 
-
 _MAX_ANALYSIS_CHARS = 20_000
 
 
@@ -42,7 +41,7 @@ def execute(
             "response_schema": LLMContentItemOutput,
         },
     )
-    llm_output = LLMContentItemOutput.model_validate_json(response.text)
+    llm_output = LLMContentItemOutput.model_validate_json(response.text or "")
 
     content_item = ContentItem(
         id=content_item_id,

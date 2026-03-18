@@ -7,14 +7,15 @@
 
 ## Overview
 
-The alert agent pipeline ingests news from configurable sources, deduplicates by content hash, processes unique items through an LLM to produce structured content feeds (including rubric assessment), evaluates each feed item for notification worthiness per user via rule-based relevance matching, delivers alerts via configurable channels, and collects feedback that directly tunes future evaluations.
+The alert agent pipeline discovers and fetches news via a jobs layer, deduplicates by content hash, processes unique items through an LLM to produce structured content feeds (including rubric assessment), evaluates each feed item for notification worthiness per user via rule-based relevance matching, delivers alerts via configurable channels, and collects feedback that directly tunes future evaluations.
 
 ### Design Principles
 
-- **Local-first, DB-ready**: All storage uses a `Repository[T]` abstract interface. Local JSONL implementations ship first; swapping to a database requires only a new concrete implementation — no business logic changes.
+- **Local-first, DB-ready**: All storage uses a `Repository[T]` abstract interface with `list(**filters)` for field-level filtering. Local JSONL implementations ship first; swapping to a database requires only a new concrete implementation — no business logic changes.
+- **Two-phase ingestion**: Discovery and fetching are decoupled jobs. `DiscoveryJob` finds URLs and stores `PENDING` items. `PageFetchJob` fetches full content and updates to `FETCHED`. Failures are retryable.
 - **Single LLM call per article**: Rubric assessment (impact potential, narrative shift, confidence, category, reasoning) is baked into `ContentProcessor`. `FeedEvaluator` is rule-based — relevance matching only. Cost scales with articles, not users.
 - **Scalable evaluator**: `FeedEvaluator` is abstract. Start with rule-based; LLM-assisted variants can be added without touching the pipeline.
-- **Abstract news sources**: `NewsSource` is an interface. Tavily and RSS ship first; paid API sources plug in without pipeline changes.
+- **Abstract discovery sources**: `DiscoverySource` is an interface. `RSSDiscoverySource` ships first; other sources plug in without pipeline changes.
 - **Feedback closes the loop**: Feedback from users directly adjusts per-user `UserEvaluatorConfig`, which the evaluator reads on every run.
 - **Precision over recall in alerting**: Per PRD — we would rather miss a borderline event than train users to ignore notifications.
 
@@ -23,13 +24,16 @@ The alert agent pipeline ingests news from configurable sources, deduplicates by
 ## Pipeline
 
 ```
-[PipelineScheduler] triggers ingestion cycle
+[PipelineScheduler] triggers jobs cycle
          |
-[NewsSource(s)] ──> RawNewsItem
+[DiscoveryJob] ──> NewsItem(PENDING) ──> NewsItemRepository
+         |
+[PageFetchJob] ──> NewsItem(FETCHED) ──> NewsItemRepository
          |
 [Deduplicator]  ──> SHA-256 hash check ──> skip if already seen
          |
 [ContentProcessor] ──> LLM (extraction + rubric) ──> ContentItem ──> ContentItemRepository
+  NewsItem updated → PROCESSED
          |
 [FeedEvaluator] <── UserProfile + UserEvaluatorConfig
   rule-based relevance check only (no LLM)
@@ -51,20 +55,44 @@ The alert agent pipeline ingests news from configurable sources, deduplicates by
 
 ```
 ═══════════════════════════════════════════════════════════════════════════════
- INGESTION
+ DISCOVERY  — DiscoveryJob
 ═══════════════════════════════════════════════════════════════════════════════
 
- TavilyNewsSource.fetch()
- queries: ["Apple AI chip supply chain", "TSMC capacity 2025"]
+ RSSDiscoverySource.discover()
+ feed: "https://feeds.reuters.com/reuters/businessNews"
 
-     RawNewsItem
+ For each feed entry not already in NewsItemRepository:
+
+     NewsItem written to news_items.jsonl
      ┌────────────────────────────────────────────────────────┐
-     │ url:         "https://reuters.com/tech/apple-tsmc-..."  │
-     │ title:       "Apple secures TSMC capacity for AI chips" │
-     │ source_id:   "tavily"                                   │
-     │ raw_content: "[3,000 words of full article text]"       │
-     │ fetched_at:  2026-03-15T14:00:00Z                       │
+     │ url:           "https://reuters.com/tech/apple-tsmc-..." │
+     │ title:         "Apple secures TSMC capacity for AI chips"│
+     │ source_id:     "reuters.com"                            │
+     │ status:        PENDING                                  │
+     │ raw_content:   None                                     │
+     │ creation_time: 2026-03-15T14:00:00Z                     │
      └────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+ PAGE FETCH  — PageFetchJob
+═══════════════════════════════════════════════════════════════════════════════
+
+ Loads all PENDING items from NewsItemRepository.
+ For each, calls tavily_search.extract(url):
+
+   Success →  NewsItem updated:
+     ┌────────────────────────────────────────────────────────┐
+     │ status:      FETCHED                                    │
+     │ raw_content: "[3,000 words of full article text]"       │
+     │ error:       None                                       │
+     └────────────────────────────────────────────────────────┘
+
+   Failure →  NewsItem updated:
+     ┌──────────────────────────────────┐
+     │ status: FAILED                   │
+     │ error:  "Tavily timeout"         │
+     └──────────────────────────────────┘
+     (eligible for retry on next cycle)
 
 ═══════════════════════════════════════════════════════════════════════════════
  DEDUPLICATION
@@ -87,7 +115,7 @@ The alert agent pipeline ingests news from configurable sources, deduplicates by
      ┌────────────────────────────────────────────────────────────────┐
      │ id:               "cnt_01j..."                                  │
      │ url:              "https://reuters.com/tech/apple-tsmc-..."     │
-     │ source_id:        "tavily"                                      │
+     │ source_id:        "reuters.com"                                 │
      │ title:            "Apple secures TSMC capacity for AI chips"    │
      │                                                                 │
      │ ── extraction ─────────────────────────────────────────────── │
@@ -108,6 +136,7 @@ The alert agent pipeline ingests news from configurable sources, deduplicates by
      └────────────────────────────────────────────────────────────────┘
 
  Deduplicator.mark_seen(item)  →  "a3f9c2..." appended to content_hashes.txt
+ NewsItem updated → PROCESSED
 
 ═══════════════════════════════════════════════════════════════════════════════
  FEED EVALUATION  — rule-based, no LLM  (runs once per user)
@@ -187,37 +216,98 @@ The alert agent pipeline ingests news from configurable sources, deduplicates by
 
 ## Module Specifications
 
-### 1. `news_ingestion`
+### 1. `jobs`
 
-**Location**: `src/prometheus_backend/news_ingestion/`
+**Location**: `src/prometheus_backend/jobs/`
+
+Abstract base for all pipeline jobs.
 
 ```python
-@dataclass
-class RawNewsItem:
-    url: str
-    title: str
-    source_id: str       # identifies which NewsSource produced this
-    raw_content: str     # full text content
-    fetched_at: datetime
+class Job(ABC):
+    def run(self) -> None: ...
 ```
-
-```
-NewsSource (abstract)
-  ├── fetch() -> List[RawNewsItem]
-  ├── TavilyNewsSource      # search() + extract() per result
-  ├── RSSNewsSource         # feedparser; raw_content = RSS summary
-  └── APINewsSource         # future: Bloomberg, Reuters, etc.
-```
-
-Each source is independently configurable (search queries, feed URLs, API credentials). Sources are instantiated and injected into the scheduler.
 
 ---
 
-### 2. `deduplication`
+### 2. `news_aggregator`
+
+**Location**: `src/prometheus_backend/news_aggregator/`
+
+#### Models
+
+```python
+class NewsItemStatus(str, Enum):
+    PENDING   = "pending"    # Discovered; full content not yet fetched
+    FETCHED   = "fetched"    # Full raw_content retrieved; ready for pipeline
+    PROCESSED = "processed"  # Passed through dedup and ContentProcessor
+    FAILED    = "failed"     # Fetch or processing failed; eligible for retry
+
+class NewsItem(BaseModel):
+    url:           str              # also serves as id
+    title:         str
+    source_id:     str              # publisher domain, e.g. "reuters.com"
+    status:        NewsItemStatus
+    creation_time: datetime
+    raw_content:   Optional[str]    # None until fetched
+    error:         Optional[str]    # populated on FAILED
+
+    @property
+    def id(self) -> str: return self.url
+```
+
+Validation: URL must be valid, title/source_id non-blank, raw_content non-blank if provided, FETCHED requires raw_content, creation_time not in future.
+
+#### Storage
+
+```python
+class NewsItemRepository(Repository[NewsItem]): ...
+class LocalNewsItemRepository(LocalJsonlRepository[NewsItem]): ...
+# Backed by data/news_items.jsonl
+# Supports: repo.list(status=NewsItemStatus.PENDING)
+```
+
+#### Jobs
+
+```python
+@dataclass
+class DiscoveredItem:
+    url: str
+    title: str
+    source_id: str
+    creation_time: datetime
+
+class DiscoverySource(ABC):
+    def discover(self) -> list[DiscoveredItem]: ...
+
+@dataclass
+class RSSFeedConfig:
+    source_id: str   # e.g. "reuters.com"
+    feed_url:  str   # e.g. "https://feeds.reuters.com/reuters/businessNews"
+
+class RSSDiscoverySource(DiscoverySource):
+    # Parses RSS/Atom feed via feedparser
+    # Skips entries missing url or title
+    # Uses published_parsed for creation_time; falls back to now()
+
+class DiscoveryJob(Job):
+    # Runs all DiscoverySource(s)
+    # Skips URLs already in NewsItemRepository (repo.get(url))
+    # Stores new items as NewsItem(status=PENDING)
+
+class PageFetchJob(Job):
+    # Loads all PENDING items from NewsItemRepository
+    # Calls tavily_search.extract(url) per item
+    # Success → status=FETCHED, raw_content=content, error=None
+    # Failure → status=FAILED, error=str(exception)
+```
+
+---
+
+### 3. `deduplication`
 
 **Location**: `src/prometheus_backend/deduplication/`
 
-SHA-256 hash of `normalize(title + raw_content)` (lowercased, whitespace-normalized). Hash is checked before LLM processing. `mark_seen` is called only after successful `ContentProcessor` output.
+SHA-256 hash of `normalize(title + raw_content)` (lowercased, whitespace-normalized). Checked before LLM processing. `mark_seen` called only after successful `ContentProcessor` output.
 
 ```python
 class HashRepository(ABC):
@@ -228,43 +318,43 @@ class LocalHashRepository(HashRepository): ...  # one hash per line flat file
 
 class Deduplicator:
     def __init__(self, repo: HashRepository): ...
-    def is_duplicate(self, item: RawNewsItem) -> bool: ...
-    def mark_seen(self, item: RawNewsItem) -> None: ...
+    def is_duplicate(self, item: NewsItem) -> bool: ...
+    def mark_seen(self, item: NewsItem) -> None: ...
 ```
 
 ---
 
-### 3. `content_processing`
+### 4. `content_processing`
 
 **Location**: `src/prometheus_backend/content_processing/`
 
-Wraps the existing `create_content_item_handler`. The LLM prompt is extended to also return rubric assessment fields alongside extraction fields. `ContentItem` gains four new fields populated by the LLM:
+Wraps the existing `create_content_item_handler`. The LLM prompt covers both extraction and rubric assessment in a single Gemini call. `ContentItem` includes four rubric fields populated by the LLM:
 
-| New field | Type | Description |
+| Field | Type | Description |
 |---|---|---|
 | `alert_category` | `AlertCategory` | Which alert category this falls under |
 | `impact_potential` | `ImpactPotential` | HIGH / MEDIUM / LOW |
 | `narrative_shift` | `bool` | True if this represents a structural narrative change |
-| `reasoning` | `str` | "Why it matters" — surfaced directly in the notification |
+| `reasoning` | `str` | "Why it matters" — surfaced in the notification |
 
 ```python
 class ContentProcessor:
-    def process(self, item: RawNewsItem) -> Optional[ContentItem]: ...
+    def process(self, item: NewsItem) -> Optional[ContentItem]: ...
 ```
 
-Returns `None` on LLM failure — pipeline skips and logs without blocking. `Deduplicator.mark_seen()` is called by `PipelineScheduler` after successful processing.
+Returns `None` on LLM failure — pipeline skips and logs without blocking. Scheduler calls `Deduplicator.mark_seen()` and updates `NewsItem → PROCESSED` after successful output.
 
 ---
 
-### 4. `feed_evaluation`
+### 5. `feed_evaluation`
 
 **Location**: `src/prometheus_backend/feed_evaluation/`
 
-Rule-based. No LLM call. Evaluates criterion 1 (relevance) via set intersection; criteria 2–4 are read directly from `ContentItem`.
+Rule-based. No LLM call. Criterion 1 (relevance) via set intersection; criteria 2–4 read from `ContentItem`.
 
 #### Routing Logic
 
-All four criteria must be met to route to PUSH. Partial match routes to DIGEST. No match routes to DISCARD.
+All four criteria must be met to route to PUSH. Partial match → DIGEST. No match → DISCARD.
 
 | Criterion | Source |
 |---|---|
@@ -299,7 +389,7 @@ class EvaluationResult:
     content_item_id: str
     user_id: str
     routing: AlertRouting
-    relevance_explanation: str   # "Matches your AAPL position and AI Infra theme."
+    relevance_explanation: str
 
 @dataclass
 class UserEvaluatorConfig:
@@ -315,18 +405,14 @@ class UserEvaluatorConfig:
 class FeedEvaluator(ABC):
     def evaluate(self, item: ContentItem, user_profile: UserProfile) -> EvaluationResult: ...
 
-class RuleBasedFeedEvaluator(FeedEvaluator):
-    # Reads rubric fields from ContentItem.
-    # Runs relevance check against UserProfile.
-    # Applies UserEvaluatorConfig thresholds and weights.
-    ...
+class RuleBasedFeedEvaluator(FeedEvaluator): ...
 ```
 
 **Note**: The evaluator must not produce buy/sell signals, price targets, or investment advice.
 
 ---
 
-### 5. `user_profile`
+### 6. `user_profile`
 
 **Location**: `src/prometheus_backend/user_profile/`
 
@@ -337,7 +423,7 @@ class Channel(Enum):
 
 @dataclass
 class NotificationPreferences:
-    push_enabled: bool          # False by default
+    push_enabled: bool
     channels: List[Channel]
     digest_schedule: str        # e.g. "Monday 09:00"
 
@@ -350,18 +436,12 @@ class UserProfile:
     notification_prefs: NotificationPreferences
     evaluator_config: UserEvaluatorConfig
 
-class UserProfileRepository(Repository[UserProfile]):
-    def put(self, profile: UserProfile) -> None: ...
-    def get(self, user_id: str) -> Optional[UserProfile]: ...
-    def list(self) -> List[UserProfile]: ...
-    def delete(self, user_id: str) -> None: ...
-
 class LocalUserProfileRepository(LocalJsonlRepository[UserProfile]): ...
 ```
 
 ---
 
-### 6. `notification`
+### 7. `notification`
 
 **Location**: `src/prometheus_backend/notification/`
 
@@ -371,37 +451,22 @@ class LocalUserProfileRepository(LocalJsonlRepository[UserProfile]): ...
 | Digest | Enabled | Per user digest_schedule | Once/week |
 
 ```python
-@dataclass
-class Notification:
-    user_id: str
-    alert_category: AlertCategory
-    summary: str          # from ContentItem
-    reasoning: str        # from ContentItem
-    relevance: str        # from EvaluationResult
-    credibility: ContentCredibility
-    source_url: str
-    created_at: datetime
-
 class NotificationChannel(ABC):
     def send(self, notification: Notification, user: UserProfile) -> bool: ...
 
 class EmailChannel(NotificationChannel): ...
 class SMSChannel(NotificationChannel): ...
 
-class NotificationFormatter:
-    def format_push(self, notification: Notification, channel: Channel) -> str: ...
-    def format_digest(self, notifications: List[Notification], channel: Channel) -> str: ...
-
 class NotificationService:
     def send_push(self, result: EvaluationResult, item: ContentItem, user: UserProfile) -> None: ...
     def send_digest(self, results: List[EvaluationResult], items: List[ContentItem], user: UserProfile) -> None: ...
 ```
 
-`send_push` is a no-op if `push_enabled=False` — item is held for next digest. Digest content: top 3–5 PUSH-worthy items, notable narrative shifts, 1–2 emerging signals.
+`send_push` is a no-op if `push_enabled=False` — item held for next digest.
 
 ---
 
-### 7. `feedback`
+### 8. `feedback`
 
 **Location**: `src/prometheus_backend/feedback/`
 
@@ -424,7 +489,7 @@ class FeedbackRecord:
     user_id: str
     timestamp: datetime
     interruption_value: InterruptionValue
-    failure_reason: Optional[FailureReason]   # required if NOT_USEFUL
+    failure_reason: Optional[FailureReason]
     free_text: Optional[str]                  # stored but not acted on in V1
 ```
 
@@ -441,32 +506,19 @@ class FeedbackRecord:
 | NOT_USEFUL + REPETITIVE | Increase `suppression_window_days` |
 
 ```python
-class FeedbackRepository(Repository[FeedbackRecord]):
-    def put(self, record: FeedbackRecord) -> None: ...
-    def get(self, id: str) -> Optional[FeedbackRecord]: ...
-    def list(self) -> List[FeedbackRecord]: ...
-    def list_by_user(self, user_id: str) -> List[FeedbackRecord]: ...
-    def delete(self, id: str) -> None: ...
-
 class LocalFeedbackRepository(LocalJsonlRepository[FeedbackRecord]): ...
 
 class FeedbackCollector:
-    def __init__(self, repo: FeedbackRepository, signal_mapper: FeedbackSignalMapper): ...
     def collect(self, record: FeedbackRecord, user_profile: UserProfile) -> UserProfile: ...
 
 class FeedbackSignalMapper:
-    def apply(
-        self,
-        record: FeedbackRecord,
-        config: UserEvaluatorConfig,
-        alert_category: AlertCategory,
-        source_id: str,
-    ) -> UserEvaluatorConfig: ...
+    def apply(self, record: FeedbackRecord, config: UserEvaluatorConfig,
+              alert_category: AlertCategory, source_id: str) -> UserEvaluatorConfig: ...
 ```
 
 ---
 
-### 8. `scheduler`
+### 9. `scheduler`
 
 **Location**: `src/prometheus_backend/scheduler/`
 
@@ -474,15 +526,16 @@ class FeedbackSignalMapper:
 
 ```python
 class PipelineScheduler:
-    def run_ingestion_cycle(self) -> None:
+    def run_jobs_cycle(self) -> None:
         """
-        1. Fetch RawNewsItems from all configured NewsSource(s)
-        2. For each item:
-           a. Check Deduplicator — skip if duplicate
-           b. Run ContentProcessor → ContentItem
-           c. Mark item as seen in Deduplicator
+        1. DiscoveryJob.run()     — find new URLs, store as PENDING
+        2. PageFetchJob.run()     — fetch content for PENDING items
+        3. For each FETCHED item:
+           a. Deduplicator check — skip if duplicate
+           b. ContentProcessor → ContentItem
+           c. Deduplicator.mark_seen(); NewsItem → PROCESSED
            d. For each user profile:
-              - Run FeedEvaluator → EvaluationResult
+              - FeedEvaluator → EvaluationResult
               - If PUSH and push_enabled: NotificationService.send_push()
               - If PUSH and push_disabled, or DIGEST: hold for digest
         """
@@ -490,12 +543,12 @@ class PipelineScheduler:
     def run_digest_cycle(self) -> None:
         """
         1. For each user whose digest_schedule matches now:
-           a. Collect pending DIGEST-routed items for that user
+           a. Collect pending DIGEST-routed items
            b. NotificationService.send_digest()
         """
 ```
 
-`run_ingestion_cycle` runs on a fixed interval (default: every 30 minutes). `run_digest_cycle` runs hourly and checks each user's `digest_schedule`. Both cycles are independent.
+`run_jobs_cycle` runs on a fixed interval (default: every 30 minutes). `run_digest_cycle` runs hourly.
 
 ---
 
@@ -503,41 +556,48 @@ class PipelineScheduler:
 
 ```
 src/prometheus_backend/
-  ├── news_ingestion/
-  │   ├── models.py                  # RawNewsItem
-  │   └── sources/
-  │       ├── base.py                # NewsSource (abstract)
-  │       ├── tavily_source.py
-  │       └── rss_source.py
+  ├── jobs/
+  │   └── base.py                        # Job (abstract)
+  ├── news_aggregator/
+  │   ├── jobs/
+  │   │   ├── discovery_job.py           # DiscoveryJob, DiscoverySource, DiscoveredItem,
+  │   │   │                              # RSSDiscoverySource, RSSFeedConfig
+  │   │   └── page_fetch_job.py          # PageFetchJob
+  │   ├── models/
+  │   │   └── news_item.py               # NewsItem, NewsItemStatus
+  │   └── storage/
+  │       └── news_item_repository.py    # NewsItemRepository, LocalNewsItemRepository
   ├── deduplication/
-  │   └── deduplicator.py            # Deduplicator, compute_hash
+  │   └── deduplicator.py                # Deduplicator, compute_hash
   ├── content_processing/
-  │   └── processor.py               # ContentProcessor (wraps existing handler)
+  │   └── processor.py                   # ContentProcessor
   ├── feed_evaluation/
-  │   ├── models.py                  # EvaluationResult, UserEvaluatorConfig, AlertCategory, ImpactPotential
-  │   └── evaluator.py               # FeedEvaluator (abstract) + RuleBasedFeedEvaluator
+  │   ├── models.py                      # EvaluationResult, UserEvaluatorConfig,
+  │   │                                  # AlertCategory, ImpactPotential
+  │   └── evaluator.py                   # FeedEvaluator (abstract), RuleBasedFeedEvaluator
   ├── user_profile/
-  │   ├── models.py                  # UserProfile, NotificationPreferences
+  │   ├── models.py                      # UserProfile, NotificationPreferences
   │   └── repository.py
   ├── notification/
-  │   ├── models.py                  # Notification
-  │   ├── service.py                 # NotificationService
-  │   ├── formatter.py               # NotificationFormatter
-  │   ├── scheduler.py               # DigestScheduler
+  │   ├── models.py                      # Notification
+  │   ├── service.py                     # NotificationService
+  │   ├── formatter.py                   # NotificationFormatter
+  │   ├── scheduler.py                   # DigestScheduler
   │   └── channels/
-  │       ├── base.py                # NotificationChannel (abstract)
+  │       ├── base.py                    # NotificationChannel (abstract)
   │       ├── email_channel.py
   │       └── sms_channel.py
   ├── feedback/
-  │   ├── models.py                  # FeedbackRecord, InterruptionValue, FailureReason
-  │   ├── collector.py               # FeedbackCollector
-  │   ├── signal_mapper.py           # FeedbackSignalMapper
+  │   ├── models.py                      # FeedbackRecord, InterruptionValue, FailureReason
+  │   ├── collector.py                   # FeedbackCollector
+  │   ├── signal_mapper.py               # FeedbackSignalMapper
   │   └── repository.py
   ├── storage/
-  │   ├── repository_base.py         # Repository[T] + LocalJsonlRepository[M]
-  │   ├── hash_repository_base.py    # HashRepository + LocalHashRepository
+  │   ├── repository_base.py             # Repository[T] + LocalJsonlRepository[M]
+  │   │                                  # list(**filters) for field-level filtering
+  │   ├── hash_repository_base.py        # HashRepository + LocalHashRepository
   │   └── local_file_system/
-  │       └── content_item_store.py  # ContentItemStore
+  │       └── content_item_store.py      # ContentItemStore
   └── scheduler/
       └── pipeline_scheduler.py
 ```
@@ -548,7 +608,8 @@ src/prometheus_backend/
 
 ```
 src/prometheus_backend/data/
-  ├── content_items.jsonl       # existing
+  ├── news_items.jsonl          # NewsItem records (PENDING → FETCHED → PROCESSED)
+  ├── content_items.jsonl       # ContentItem records (LLM output)
   ├── content_hashes.txt        # one SHA-256 hash per line
   ├── user_profiles.jsonl
   └── feedback.jsonl
@@ -559,15 +620,18 @@ src/prometheus_backend/data/
 ## Inter-Module Dependencies
 
 ```
-scheduler ──> news_ingestion
+scheduler ──> news_aggregator (jobs, models, storage)
            ──> deduplication
            ──> content_processing ──> (existing) handlers, services, storage
            ──> feed_evaluation    ──> user_profile
            ──> notification       ──> user_profile
            ──> feedback           ──> user_profile, feed_evaluation.models
 
-feed_evaluation ──> user_profile.models
-feedback        ──> feed_evaluation.models, user_profile
+news_aggregator.jobs ──> jobs.base
+                     ──> news_aggregator.models
+                     ──> news_aggregator.storage
+feed_evaluation      ──> user_profile.models
+feedback             ──> feed_evaluation.models, user_profile
 ```
 
 No circular dependencies.
@@ -578,11 +642,14 @@ No circular dependencies.
 
 1. ~~`storage/repository_base.py`~~ **done**
 2. ~~`deduplication`~~ **done**
-3. ~~`news_ingestion/models.py`~~ **done**
-4. `news_ingestion/sources/` — `NewsSource` abstract + `TavilyNewsSource` + `RSSNewsSource`
-5. `content_processing` — extend LLM prompt with rubric fields; update `ContentItem` model
-6. `user_profile`
-7. `feed_evaluation` — rule-based `RuleBasedFeedEvaluator`
-8. `scheduler` — wires 1–7 into a runnable cycle
-9. `notification` — Email + SMS delivery
-10. `feedback` — closes the loop
+3. ~~`news_aggregator/models/news_item.py`~~ **done**
+4. ~~`news_aggregator/storage/news_item_repository.py`~~ **done**
+5. ~~`jobs/base.py`~~ **done**
+6. ~~`news_aggregator/jobs/discovery_job.py`~~ **done**
+7. ~~`news_aggregator/jobs/page_fetch_job.py`~~ **done**
+8. `content_processing` — extend LLM prompt with rubric fields; update `ContentItem` model
+9. `user_profile`
+10. `feed_evaluation` — rule-based `RuleBasedFeedEvaluator`
+11. `scheduler` — wires everything into a runnable cycle
+12. `notification` — Email + SMS delivery
+13. `feedback` — closes the loop
