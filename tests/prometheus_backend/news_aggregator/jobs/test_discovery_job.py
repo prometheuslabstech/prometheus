@@ -62,12 +62,14 @@ def make_discovered_item(
     source_type=SourceType.RSS,
     title="Test Title",
     source_id="reuters.com",
+    author=None,
 ):
     return DiscoveredItem(
         source_ref=source_ref,
         source_type=source_type,
         title=title,
         source_id=source_id,
+        author=author,
         creation_time=CREATION_TIME,
     )
 
@@ -262,3 +264,24 @@ def test_discovery_job_stores_correct_fields():
     assert stored.title == "Apple news"
     assert stored.source_id == "reuters.com"
     assert stored.status == NewsItemStatus.PENDING
+
+
+def test_discovery_job_stores_author_for_twitter_item():
+    item = make_discovered_item(
+        source_ref="1234567890",
+        source_type=SourceType.TWITTER,
+        source_id="twitter",
+        author="@Reuters",
+    )
+    repo = make_mock_repo()
+    DiscoveryJob(sources=[make_mock_source([item])], repository=repo).run()
+    stored = repo.put.call_args[0][0]
+    assert stored.author == "@Reuters"
+
+
+def test_discovery_job_author_is_none_for_rss_item():
+    item = make_discovered_item(author=None)
+    repo = make_mock_repo()
+    DiscoveryJob(sources=[make_mock_source([item])], repository=repo).run()
+    stored = repo.put.call_args[0][0]
+    assert stored.author is None

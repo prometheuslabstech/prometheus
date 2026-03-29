@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Optional
 
 import feedparser
 
@@ -24,11 +25,12 @@ logger = logging.getLogger(__name__)
 class DiscoveredItem:
     """Raw discovery result from a source before it becomes a NewsItem."""
 
-    source_ref: str       # URL for RSS; tweet ID for Twitter
+    source_ref: str             # URL for RSS; tweet ID for Twitter
     source_type: SourceType
     title: str
-    source_id: str
+    source_id: str              # platform/feed label, e.g. "reuters.com", "twitter"
     creation_time: datetime
+    author: Optional[str] = None  # None for RSS; "@Reuters" for Twitter
 
 
 class DiscoverySource(ABC):
@@ -133,6 +135,7 @@ class DiscoveryJob(Job):
                     source_type=item.source_type,
                     title=item.title,
                     source_id=item.source_id,
+                    author=item.author,
                     status=NewsItemStatus.PENDING,
                     creation_time=item.creation_time,
                 )

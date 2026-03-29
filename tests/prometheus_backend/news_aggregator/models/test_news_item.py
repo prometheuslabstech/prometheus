@@ -138,6 +138,19 @@ def test_processed_item_accepted():
     make_item(status=NewsItemStatus.PROCESSED)
 
 
+# --- author ---
+
+
+def test_author_none_by_default():
+    item = make_item()
+    assert item.author is None
+
+
+def test_author_set_for_twitter_item():
+    item = make_item(source_ref="1234567890", source_type=SourceType.TWITTER, author="@Reuters")
+    assert item.author == "@Reuters"
+
+
 # --- id property ---
 
 
