@@ -8,10 +8,11 @@ from pydantic import BaseModel, field_validator, model_validator
 class NewsItemStatus(str, Enum):
     """Lifecycle status of a NewsItem as it moves through the aggregation pipeline."""
 
-    PENDING = "pending"      # Discovered; full content not yet fetched
-    FETCHED = "fetched"      # Full raw_content retrieved; ready for dedup + content processing
-    PROCESSED = "processed"  # Successfully passed through dedup and ContentProcessor
-    FAILED = "failed"        # Fetch or processing failed; eligible for retry
+    PENDING = "pending"          # Discovered; full content not yet fetched
+    FETCHED = "fetched"          # Full raw_content retrieved; ready for dedup + content processing
+    DEDUPLICATED = "deduplicated"  # Confirmed unique; ready for ContentProcessor
+    PROCESSED = "processed"      # Successfully passed through ContentProcessor
+    FAILED = "failed"            # Fetch or processing failed; eligible for retry
 
 
 class SourceType(str, Enum):

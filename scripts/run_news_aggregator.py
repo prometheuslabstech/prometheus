@@ -19,7 +19,17 @@ from prometheus_backend.news_aggregator.pipeline import build_news_aggregator_pi
 from prometheus_backend.news_aggregator.storage.news_item_repository import LocalNewsItemRepository
 from prometheus_backend.news_aggregator.storage.watermark_repository import LocalWatermarkRepository
 
-logging.basicConfig(level=logging.INFO)
+LOG_PATH = Path("logs/news_aggregator.log")
+LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(LOG_PATH),
+    ],
+)
 logger = logging.getLogger(__name__)
 
 NEWS_ITEMS_PATH = Path("data/news_items.jsonl")

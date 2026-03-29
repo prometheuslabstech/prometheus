@@ -34,8 +34,9 @@ def test_file_not_created_without_add(tmp_path):
 
 
 def test_load_from_existing_file(tmp_path):
-    path = tmp_path / "hashes.txt"
-    path.write_text("hash1\nhash2\n")
+    import json
+    path = tmp_path / "hashes.jsonl"
+    path.write_text(json.dumps({"hash": "hash1"}) + "\n" + json.dumps({"hash": "hash2"}) + "\n")
     repo = LocalHashRepository(str(path))
     assert repo.contains("hash1")
     assert repo.contains("hash2")
@@ -43,12 +44,13 @@ def test_load_from_existing_file(tmp_path):
 
 
 def test_add_is_idempotent(tmp_path):
-    path = tmp_path / "hashes.txt"
+    import json
+    path = tmp_path / "hashes.jsonl"
     repo = LocalHashRepository(str(path))
     repo.add("abc123")
     repo.add("abc123")
-    lines = [line for line in path.read_text().splitlines() if line]
-    assert lines.count("abc123") == 1
+    hashes = [json.loads(line)["hash"] for line in path.read_text().splitlines() if line]
+    assert hashes.count("abc123") == 1
 
 
 def test_multiple_hashes_stored(tmp_path):
