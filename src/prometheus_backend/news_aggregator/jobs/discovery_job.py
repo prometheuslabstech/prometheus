@@ -80,20 +80,26 @@ class DiscoveryJob(Job):
     """
     Runs all configured DiscoverySource(s) and stores new URLs as PENDING NewsItems.
     Skips URLs already present in the repository.
+    If since is provided, items published before that time are ignored.
     """
 
     def __init__(
         self,
         sources: list[DiscoverySource],
         repository: NewsItemRepository,
+        since: datetime | None = None,
     ) -> None:
         self._sources = sources
         self._repository = repository
+        self._since = since
 
     def run(self) -> None:
         for source in self._sources:
             discovered = source.discover()
             for item in discovered:
+                if self._since and item.creation_time < self._since:
+                    logger.debug("Skipping item outside time window: %s", item.url)
+                    continue
                 if self._repository.get(item.url) is not None:
                     logger.debug("Skipping already-known URL: %s", item.url)
                     continue
