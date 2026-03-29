@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,6 +19,8 @@ CONFIG = RSSFeedConfig(source_id="reuters.com", feed_url=FEED_URL)
 
 PUBLISHED = (2026, 3, 15, 10, 30, 0, 0, 0, 0)
 CREATION_TIME = datetime(2026, 3, 15, 10, 30, 0, tzinfo=timezone.utc)
+# Watermark older than CREATION_TIME — used to let test items pass through
+WATERMARK_BEFORE = datetime(2026, 3, 15, 9, 0, 0, tzinfo=timezone.utc)
 
 
 def make_entry(
@@ -53,7 +55,8 @@ def make_mock_repo(existing_refs: set[str] | None = None):
 
 def make_watermark_repo(last_crawl: datetime | None = None):
     repo = MagicMock()
-    repo.get.return_value = last_crawl
+    # Default mirrors LocalWatermarkRepository: 48h lookback when no watermark exists
+    repo.get.return_value = last_crawl or (datetime.now(timezone.utc) - timedelta(hours=48))
     return repo
 
 
@@ -88,7 +91,7 @@ def test_cannot_instantiate_discovery_source_without_implementing_discover():
 @patch("prometheus_backend.news_aggregator.jobs.discovery_job.feedparser.parse")
 def test_rss_returns_discovered_item_for_valid_entry(mock_parse):
     mock_parse.return_value = make_mock_feed([make_entry()])
-    items = RSSDiscoverySource(CONFIG, make_watermark_repo()).discover()
+    items = RSSDiscoverySource(CONFIG, make_watermark_repo(last_crawl=WATERMARK_BEFORE)).discover()
     assert len(items) == 1
     assert items[0].source_ref == "https://reuters.com/article/1"
     assert items[0].source_type == SourceType.RSS
@@ -129,7 +132,7 @@ def test_rss_logs_error_for_missing_publish_time(mock_parse, caplog):
 @patch("prometheus_backend.news_aggregator.jobs.discovery_job.feedparser.parse")
 def test_rss_uses_published_parsed_for_creation_time(mock_parse):
     mock_parse.return_value = make_mock_feed([make_entry(published_parsed=PUBLISHED)])
-    items = RSSDiscoverySource(CONFIG, make_watermark_repo()).discover()
+    items = RSSDiscoverySource(CONFIG, make_watermark_repo(last_crawl=WATERMARK_BEFORE)).discover()
     assert items[0].creation_time == CREATION_TIME
 
 
@@ -147,7 +150,7 @@ def test_rss_returns_multiple_items(mock_parse):
             make_entry(link="https://reuters.com/2", title="Story Two"),
         ]
     )
-    items = RSSDiscoverySource(CONFIG, make_watermark_repo()).discover()
+    items = RSSDiscoverySource(CONFIG, make_watermark_repo(last_crawl=WATERMARK_BEFORE)).discover()
     assert len(items) == 2
 
 
@@ -155,9 +158,11 @@ def test_rss_returns_multiple_items(mock_parse):
 
 
 @patch("prometheus_backend.news_aggregator.jobs.discovery_job.feedparser.parse")
-def test_rss_returns_all_items_when_no_watermark(mock_parse):
+def test_rss_returns_items_within_default_lookback_when_no_watermark(mock_parse):
+    # When no watermark exists, repo returns now-48h; items within that window are included.
+    # Use WATERMARK_BEFORE so CREATION_TIME passes the filter.
     mock_parse.return_value = make_mock_feed([make_entry()])
-    items = RSSDiscoverySource(CONFIG, make_watermark_repo(last_crawl=None)).discover()
+    items = RSSDiscoverySource(CONFIG, make_watermark_repo(last_crawl=WATERMARK_BEFORE)).discover()
     assert len(items) == 1
 
 

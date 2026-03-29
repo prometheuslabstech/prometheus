@@ -44,7 +44,8 @@ class TwitterDiscoverySource(DiscoverySource):
 
     Watermark key is "{source_id}:{handle}" per user, so each handle tracks
     its own crawl position independently.
-    start_time is passed directly to the X API to avoid client-side filtering.
+    Filtering by watermark is done client-side on created_at, consistent with
+    RSSDiscoverySource, so no API-level time filter is required.
     """
 
     def __init__(
@@ -68,20 +69,19 @@ class TwitterDiscoverySource(DiscoverySource):
                 logger.warning("Twitter user not found: @%s", handle)
                 continue
 
-            kwargs: dict = {
-                "max_results": self._config.max_results_per_user,
-                "tweet_fields": ["created_at"],
-            }
-            if last_crawl:
-                kwargs["start_time"] = last_crawl
-
-            response = self._client.get_users_tweets(user_response.data.id, **kwargs)
+            response = self._client.get_users_tweets(
+                user_response.data.id,
+                max_results=self._config.max_results_per_user,
+                tweet_fields=["created_at"],
+            )
             if not response.data:
                 self._watermark_repo.set(watermark_key, crawl_time)
                 continue
 
             for tweet in response.data:
                 creation_time = tweet.created_at or datetime.now(timezone.utc)
+                if creation_time <= last_crawl:
+                    continue
                 items.append(
                     DiscoveredItem(
                         source_ref=str(tweet.id),
