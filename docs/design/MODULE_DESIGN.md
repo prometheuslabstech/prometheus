@@ -15,7 +15,10 @@ The alert agent pipeline discovers and fetches news via a jobs layer, deduplicat
 - **Two-phase ingestion**: Discovery and fetching are decoupled jobs. `DiscoveryJob` finds URLs and stores `PENDING` items. `PageFetchJob` fetches full content and updates to `FETCHED`. Failures are retryable.
 - **Single LLM call per article**: Rubric assessment (impact potential, narrative shift, confidence, category, reasoning) is baked into `ContentProcessor`. `FeedEvaluator` is rule-based — relevance matching only. Cost scales with articles, not users.
 - **Scalable evaluator**: `FeedEvaluator` is abstract. Start with rule-based; LLM-assisted variants can be added without touching the pipeline.
-- **Abstract discovery sources**: `DiscoverySource` is an interface. `RSSDiscoverySource` ships first; other sources plug in without pipeline changes.
+- **Abstract discovery sources**: `DiscoverySource` is an interface. `RSSDiscoverySource` ships first; other sources plug in without pipeline changes. Sources are categorized into three types: RSS/XML Pollers (open sources), Webhook/Enterprise API receivers (closed financial ecosystems), and Dynamic Crawlers (JS-heavy walled gardens). A `DiscoverySourceFactory` instantiates the correct type per feed config.
+- **Watermark-based crawl tracking**: Each `DiscoverySource` tracks a `last_crawl_timestamp` per feed. On each cycle, only items with `publication_time > last_crawl_timestamp` are returned as new. This is more efficient and semantically correct than URL-only dedup, which cannot distinguish "already seen" from "not yet published." Watermarks are persisted so restarts do not re-discover old content.
+- **Edge normalization**: All `DiscoverySource` implementations normalize their native format (XML, JSON, raw HTML) into a standard `DiscoveredItem` before returning. Downstream pipeline stages are insulated from source-specific schema changes.
+- **Queue-ready ingestion**: `NewsItemRepository` (PENDING status) acts as a logical work queue between Discovery and Fetch. Local JSONL ships first. The queue boundary can be swapped for a high-throughput broker (Kafka, RabbitMQ) without changing `DiscoveryJob` or `PageFetchJob` — only the repository implementation changes.
 - **Feedback closes the loop**: Feedback from users directly adjusts per-user `UserEvaluatorConfig`, which the evaluator reads on every run.
 - **Precision over recall in alerting**: Per PRD — we would rather miss a borderline event than train users to ignore notifications.
 
@@ -278,21 +281,52 @@ class DiscoveredItem:
 
 class DiscoverySource(ABC):
     def discover(self) -> list[DiscoveredItem]: ...
+    # Implementations must:
+    #   1. Filter to items with publication_time > last_crawl_timestamp (watermark check)
+    #   2. Normalize native format (XML/JSON/HTML) into DiscoveredItem (edge normalization)
+    #   3. Update last_crawl_timestamp after successful discover()
+
+# ── Source Types ────────────────────────────────────────────────────────────
+#
+# Type 1 — RSS/XML Poller
+#   For: open publishers (Reuters, FT, SEC EDGAR, Reddit)
+#   Method: feedparser over RSS/Atom feeds; low-bandwidth, stable
+#
+# Type 2 — Webhook / Enterprise API receiver
+#   For: closed financial ecosystems (Bloomberg, Refinitiv/LSEG, Dow Jones)
+#   Method: receive pushed data via registered webhook endpoint or pull
+#           via authenticated REST/WebSocket API with cursor-based pagination
+#
+# Type 3 — Dynamic Crawler
+#   For: JS-heavy walled gardens (Instagram, Facebook, paywalled sites)
+#   Method: headless browser (Playwright) renders the page before extraction;
+#           higher cost and maintenance burden — use only when no API exists
+#
+# DiscoverySourceFactory selects the correct type based on feed config.
+# ────────────────────────────────────────────────────────────────────────────
 
 @dataclass
 class RSSFeedConfig:
-    source_id: str   # e.g. "reuters.com"
-    feed_url:  str   # e.g. "https://feeds.reuters.com/reuters/businessNews"
+    source_id:           str       # e.g. "reuters.com"
+    feed_url:            str       # e.g. "https://feeds.reuters.com/reuters/businessNews"
 
 class RSSDiscoverySource(DiscoverySource):
     # Parses RSS/Atom feed via feedparser
     # Skips entries missing url or title
-    # Uses published_parsed for creation_time; falls back to now()
+    # Returns only entries where published_parsed > last_crawl_timestamp
+    # Uses published_parsed for creation_time; falls back to now() on first run
+    # Updates last_crawl_timestamp after each successful discover()
+
+class DiscoverySourceFactory:
+    # Inspects feed config and returns the appropriate DiscoverySource subclass.
+    # Config fields (e.g. source_type: "rss" | "webhook" | "crawler") determine selection.
+    @staticmethod
+    def create(config: FeedConfig) -> DiscoverySource: ...
 
 class DiscoveryJob(Job):
-    # Runs all DiscoverySource(s)
-    # Skips URLs already in NewsItemRepository (repo.get(url))
-    # Stores new items as NewsItem(status=PENDING)
+    # Runs all DiscoverySource(s) via DiscoverySourceFactory
+    # Skips URLs already in NewsItemRepository (repo.get(url)) as secondary dedup guard
+    # Stores new items as NewsItem(status=PENDING) → logical work queue for PageFetchJob
 
 class PageFetchJob(Job):
     # Loads all PENDING items from NewsItemRepository
