@@ -25,7 +25,8 @@ class NewsItem(BaseModel):
     source_ref: str          # URL for RSS; tweet ID for Twitter — also serves as id
     source_type: SourceType
     title: str
-    source_id: str           # publisher label, e.g. "reuters.com", "yahoo_finance"
+    source_id: str           # platform/feed label, e.g. "reuters.com", "twitter"
+    author: Optional[str] = None  # None for RSS; "@Reuters" for Twitter
     status: NewsItemStatus
     creation_time: datetime
     raw_content: Optional[str] = None  # None until fetched
