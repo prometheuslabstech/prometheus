@@ -9,7 +9,7 @@ from prometheus_backend.news_aggregator.jobs.discovery_job import (
 from prometheus_backend.news_aggregator.storage.news_item_repository import (
     LocalNewsItemRepository,
 )
-from prometheus_backend.storage.watermark_repository import LocalWatermarkRepository
+from prometheus_backend.news_aggregator.storage.watermark_repository import LocalWatermarkRepository
 
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)

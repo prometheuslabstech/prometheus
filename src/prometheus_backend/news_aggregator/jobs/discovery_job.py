@@ -10,7 +10,7 @@ from prometheus_backend.news_aggregator.models.news_item import NewsItem, NewsIt
 from prometheus_backend.news_aggregator.storage.news_item_repository import (
     NewsItemRepository,
 )
-from prometheus_backend.storage.watermark_repository import WatermarkRepository
+from prometheus_backend.news_aggregator.storage.watermark_repository import WatermarkRepository
 
 logger = logging.getLogger(__name__)
 
