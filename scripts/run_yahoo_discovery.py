@@ -1,30 +1,26 @@
 """Run Yahoo Finance discovery job and print results to stdout."""
 
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from prometheus_backend.news_aggregator.jobs.discovery_job import (
     DiscoveryJob,
-    RSSDiscoverySource,
-    RSSFeedConfig,
+    YahooFinanceDiscoverySource,
 )
 from prometheus_backend.news_aggregator.storage.news_item_repository import (
     LocalNewsItemRepository,
 )
+from prometheus_backend.storage.watermark_repository import LocalWatermarkRepository
 
-OUTPUT_FILE = Path(__file__).parent / "yahoo_news_items.jsonl"
+DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR.mkdir(exist_ok=True)
 
 if __name__ == "__main__":
-    since = datetime.now(timezone.utc) - timedelta(hours=48)
-    repository = LocalNewsItemRepository(OUTPUT_FILE)
+    watermark_repo = LocalWatermarkRepository(DATA_DIR / "watermarks.json")
+    repository = LocalNewsItemRepository(DATA_DIR / "yahoo_news_items.jsonl")
 
     job = DiscoveryJob(
-        sources=[RSSDiscoverySource(RSSFeedConfig(
-            source_id="yahoo_finance",
-            feed_url="https://finance.yahoo.com/news/rssindex",
-        ))],
+        sources=[YahooFinanceDiscoverySource(watermark_repo)],
         repository=repository,
-        since=since,
     )
     job.run()
 
@@ -33,7 +29,9 @@ if __name__ == "__main__":
     for item in items:
         print(f"[{item.creation_time}] {item.title}")
         print(f"  {item.url}")
-        print(f"  status={item.status}")
+        print(f"  status={item.status.value}")
         print()
 
-    print(f"Saved to: {OUTPUT_FILE}")
+    watermark = watermark_repo.get("yahoo_finance")
+    print(f"Watermark saved: {watermark}")
+    print(f"Items saved to: {DATA_DIR / 'yahoo_news_items.jsonl'}")
