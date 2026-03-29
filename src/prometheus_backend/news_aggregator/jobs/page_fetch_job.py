@@ -1,7 +1,7 @@
 import logging
 
 from prometheus_backend.jobs.base import Job
-from prometheus_backend.news_aggregator.models.news_item import NewsItemStatus
+from prometheus_backend.news_aggregator.models.news_item import NewsItemStatus, SourceType
 from prometheus_backend.news_aggregator.storage.news_item_repository import (
     NewsItemRepository,
 )
@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 class PageFetchJob(Job):
     """
-    Fetches full page content for all PENDING NewsItems.
+    Fetches full content for all PENDING NewsItems.
+    Dispatches to the appropriate fetcher based on source_type.
     Updates status to FETCHED on success, FAILED on error.
     """
 
@@ -25,7 +26,7 @@ class PageFetchJob(Job):
 
         for item in pending:
             try:
-                raw_content = tavily_search.extract(item.url)
+                raw_content = self._fetch(item.source_ref, item.source_type)
                 updated = item.model_copy(
                     update={
                         "status": NewsItemStatus.FETCHED,
@@ -33,7 +34,7 @@ class PageFetchJob(Job):
                         "error": None,
                     }
                 )
-                logger.info("Fetched: %s", item.url)
+                logger.info("Fetched: %s", item.source_ref)
             except Exception as e:
                 updated = item.model_copy(
                     update={
@@ -41,6 +42,12 @@ class PageFetchJob(Job):
                         "error": str(e),
                     }
                 )
-                logger.warning("Failed to fetch %s: %s", item.url, e)
+                logger.warning("Failed to fetch %s: %s", item.source_ref, e)
 
             self._repository.put(updated)
+
+    def _fetch(self, source_ref: str, source_type: SourceType) -> str:
+        """Dispatch to the appropriate fetcher based on source_type."""
+        if source_type == SourceType.RSS:
+            return tavily_search.extract(source_ref)
+        raise NotImplementedError(f"No fetcher implemented for source_type: {source_type}")

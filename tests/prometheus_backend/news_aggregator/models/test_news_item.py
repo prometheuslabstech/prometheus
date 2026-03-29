@@ -2,12 +2,17 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from prometheus_backend.news_aggregator.models.news_item import NewsItem, NewsItemStatus
+from prometheus_backend.news_aggregator.models.news_item import (
+    NewsItem,
+    NewsItemStatus,
+    SourceType,
+)
 
 
 def make_item(**overrides) -> NewsItem:
     defaults = dict(
-        url="https://reuters.com/article/apple-tsmc",
+        source_ref="https://reuters.com/article/apple-tsmc",
+        source_type=SourceType.RSS,
         title="Apple secures TSMC capacity",
         source_id="reuters.com",
         status=NewsItemStatus.FETCHED,
@@ -17,26 +22,36 @@ def make_item(**overrides) -> NewsItem:
     return NewsItem(**{**defaults, **overrides})
 
 
-# --- url ---
+# --- source_ref ---
 
 
-def test_valid_url_accepted():
-    make_item(url="https://reuters.com/article/apple-tsmc")
+def test_valid_source_ref_accepted():
+    make_item(source_ref="https://reuters.com/article/apple-tsmc")
 
 
-def test_url_missing_scheme_raises():
-    with pytest.raises(ValueError, match="Invalid URL"):
-        make_item(url="reuters.com/article/apple-tsmc")
+def test_tweet_id_accepted_as_source_ref():
+    make_item(source_ref="1234567890", source_type=SourceType.TWITTER)
 
 
-def test_url_missing_netloc_raises():
-    with pytest.raises(ValueError, match="Invalid URL"):
-        make_item(url="https://")
+def test_empty_source_ref_raises():
+    with pytest.raises(ValueError, match="source_ref"):
+        make_item(source_ref="")
 
 
-def test_url_empty_raises():
-    with pytest.raises(ValueError, match="Invalid URL"):
-        make_item(url="")
+def test_whitespace_only_source_ref_raises():
+    with pytest.raises(ValueError, match="source_ref"):
+        make_item(source_ref="   ")
+
+
+# --- source_type ---
+
+
+def test_rss_source_type_accepted():
+    make_item(source_type=SourceType.RSS)
+
+
+def test_twitter_source_type_accepted():
+    make_item(source_ref="1234567890", source_type=SourceType.TWITTER)
 
 
 # --- title ---
@@ -121,3 +136,16 @@ def test_failed_item_can_store_error():
 
 def test_processed_item_accepted():
     make_item(status=NewsItemStatus.PROCESSED)
+
+
+# --- id property ---
+
+
+def test_id_returns_source_ref():
+    item = make_item(source_ref="https://reuters.com/article/apple-tsmc")
+    assert item.id == "https://reuters.com/article/apple-tsmc"
+
+
+def test_id_returns_tweet_id_for_twitter():
+    item = make_item(source_ref="1234567890", source_type=SourceType.TWITTER)
+    assert item.id == "1234567890"

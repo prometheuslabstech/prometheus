@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
-from urllib.parse import urlparse
 
 from pydantic import BaseModel, field_validator, model_validator
 
@@ -9,36 +8,34 @@ from pydantic import BaseModel, field_validator, model_validator
 class NewsItemStatus(str, Enum):
     """Lifecycle status of a NewsItem as it moves through the aggregation pipeline."""
 
-    PENDING = "pending"  # Discovered (e.g. from RSS); full content not yet fetched
-    FETCHED = (
-        "fetched"  # Full raw_content retrieved; ready for dedup + content processing
-    )
+    PENDING = "pending"      # Discovered; full content not yet fetched
+    FETCHED = "fetched"      # Full raw_content retrieved; ready for dedup + content processing
     PROCESSED = "processed"  # Successfully passed through dedup and ContentProcessor
-    FAILED = "failed"  # Fetch or processing failed; eligible for retry
+    FAILED = "failed"        # Fetch or processing failed; eligible for retry
+
+
+class SourceType(str, Enum):
+    """The type of source a NewsItem was discovered from."""
+
+    RSS = "rss"
+    TWITTER = "twitter"
 
 
 class NewsItem(BaseModel):
-    url: str
+    source_ref: str          # URL for RSS; tweet ID for Twitter — also serves as id
+    source_type: SourceType
     title: str
-    source_id: str
+    source_id: str           # publisher label, e.g. "reuters.com", "yahoo_finance"
     status: NewsItemStatus
     creation_time: datetime
     raw_content: Optional[str] = None  # None until fetched
-    error: Optional[str] = None  # populated on FAILED
+    error: Optional[str] = None        # populated on FAILED
 
     @property
     def id(self) -> str:
-        return self.url
+        return self.source_ref
 
-    @field_validator("url")
-    @classmethod
-    def validate_url(cls, v: str) -> str:
-        parsed = urlparse(v)
-        if not parsed.scheme or not parsed.netloc:
-            raise ValueError(f"Invalid URL: {v!r}")
-        return v
-
-    @field_validator("title", "source_id")
+    @field_validator("source_ref", "title", "source_id")
     @classmethod
     def validate_not_blank(cls, v: str, info) -> str:
         if not v.strip():
