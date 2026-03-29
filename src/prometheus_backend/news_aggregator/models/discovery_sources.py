@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import tweepy  # type: ignore[import-untyped]
 
@@ -71,9 +71,8 @@ class TwitterDiscoverySource(DiscoverySource):
             kwargs: dict = {
                 "max_results": self._config.max_results_per_user,
                 "tweet_fields": ["created_at"],
+                "start_time": last_crawl,
             }
-            if last_crawl:
-                kwargs["start_time"] = last_crawl
 
             response = self._client.get_users_tweets(user_response.data.id, **kwargs)
             if not response.data:

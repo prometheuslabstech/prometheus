@@ -93,7 +93,7 @@ class RSSDiscoverySource(DiscoverySource):
                 published[5],
                 tzinfo=timezone.utc,
             )
-            if last_crawl and creation_time <= last_crawl:
+            if creation_time <= last_crawl:
                 continue
             items.append(
                 DiscoveredItem(
