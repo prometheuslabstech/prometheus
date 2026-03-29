@@ -8,13 +8,14 @@ from prometheus_backend.news_aggregator.models.news_item import NewsItem
 def make_item(
     title: str = "Test Title",
     raw_content: str = "Test content",
-    url: str = "https://example.com/article",
+    source_ref: str = "https://example.com/article",
 ) -> NewsItem:
     from datetime import timezone
-    from prometheus_backend.news_aggregator.models.news_item import NewsItemStatus
+    from prometheus_backend.news_aggregator.models.news_item import NewsItemStatus, SourceType
 
     return NewsItem(
-        url=url,
+        source_ref=source_ref,
+        source_type=SourceType.RSS,
         title=title,
         source_id="test-source",
         status=NewsItemStatus.FETCHED,

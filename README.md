@@ -53,3 +53,17 @@ prometheus analysis
 # Check server is registered in Claude Code
 claude mcp list
 ```
+
+## News Aggregator
+
+Runs the news aggregator pipeline — discovers articles from configured RSS feeds and fetches their full content.
+
+### Run
+
+```bash
+python scripts/run_news_aggregator.py
+```
+
+Output is written to:
+- `data/news_items.jsonl` — discovered and fetched articles
+- `data/watermarks.json` — last crawl timestamp per source

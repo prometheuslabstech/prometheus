@@ -8,13 +8,14 @@ from prometheus_backend.news_aggregator.models.news_item import NewsItem
 
 
 def make_item(
-    title: str, raw_content: str, url: str = "https://example.com/article"
+    title: str, raw_content: str, source_ref: str = "https://example.com/article"
 ) -> NewsItem:
     from datetime import timezone
-    from prometheus_backend.news_aggregator.models.news_item import NewsItemStatus
+    from prometheus_backend.news_aggregator.models.news_item import NewsItemStatus, SourceType
 
     return NewsItem(
-        url=url,
+        source_ref=source_ref,
+        source_type=SourceType.RSS,
         title=title,
         source_id="test-source",
         status=NewsItemStatus.FETCHED,
@@ -31,17 +32,17 @@ def test_two_distinct_items_and_one_duplicate(tmp_path):
     item_a = make_item(
         "Fed raises rates",
         "The Federal Reserve raised interest rates by 25bps.",
-        url="https://reuters.com/fed",
+        source_ref="https://reuters.com/fed",
     )
     item_b = make_item(
         "Apple earnings beat",
         "Apple reported record Q4 earnings above consensus.",
-        url="https://reuters.com/apple",
+        source_ref="https://reuters.com/apple",
     )
     item_a_dup = make_item(
         "Fed raises rates",
         "The Federal Reserve raised interest rates by 25bps.",
-        url="https://ft.com/fed",
+        source_ref="https://ft.com/fed",
     )
 
     # Nothing seen yet
@@ -66,8 +67,8 @@ def test_hash_file_contains_exactly_two_hashes(tmp_path):
     repo = LocalHashRepository(str(hash_file))
     dedup = Deduplicator(repo)
 
-    item_a = make_item("Story one", "Content one", url="https://reuters.com/one")
-    item_b = make_item("Story two", "Content two", url="https://reuters.com/two")
+    item_a = make_item("Story one", "Content one", source_ref="https://reuters.com/one")
+    item_b = make_item("Story two", "Content two", source_ref="https://reuters.com/two")
 
     dedup.mark_seen(item_a)
     dedup.mark_seen(item_b)
