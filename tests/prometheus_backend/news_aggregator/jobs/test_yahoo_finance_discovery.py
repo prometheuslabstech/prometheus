@@ -2,10 +2,8 @@
 
 import pytest
 
-from prometheus_backend.news_aggregator.jobs.discovery_job import (
-    DiscoveryJob,
-    YahooFinanceDiscoverySource,
-)
+from prometheus_backend.news_aggregator.jobs.discovery_job import DiscoveryJob
+from prometheus_backend.news_aggregator.models.discovery_sources import YahooFinanceDiscoverySource
 from prometheus_backend.news_aggregator.storage.news_item_repository import (
     LocalNewsItemRepository,
 )

@@ -35,6 +35,8 @@ class PageFetchJob(Job):
                     }
                 )
                 logger.info("Fetched: %s", item.source_ref)
+            except NotImplementedError:
+                raise
             except Exception as e:
                 updated = item.model_copy(
                     update={
@@ -50,4 +52,4 @@ class PageFetchJob(Job):
         """Dispatch to the appropriate fetcher based on source_type."""
         if source_type == SourceType.RSS:
             return tavily_search.extract(source_ref)
-        raise NotImplementedError(f"No fetcher implemented for source_type: {source_type}")
+        raise NotImplementedError(f"No fetcher implemented for source_type: {source_type.value}")

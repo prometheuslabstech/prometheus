@@ -1,5 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -69,6 +70,7 @@ class RSSDiscoverySource(DiscoverySource):
 
     def discover(self) -> list[DiscoveredItem]:
         last_crawl = self._watermark_repo.get(self._config.source_id)
+        crawl_time = datetime.now(timezone.utc)
         feed = feedparser.parse(self._config.feed_url)
         items = []
         for entry in feed.entries:
@@ -77,18 +79,17 @@ class RSSDiscoverySource(DiscoverySource):
             if not url or not title:
                 continue
             published = entry.get("published_parsed")
-            creation_time = (
-                datetime(
-                    published[0],
-                    published[1],
-                    published[2],
-                    published[3],
-                    published[4],
-                    published[5],
-                    tzinfo=timezone.utc,
-                )
-                if published
-                else datetime.now(timezone.utc)
+            if not published:
+                logger.error("Article missing publish time, skipping: %s", url)
+                continue
+            creation_time = datetime(
+                published[0],
+                published[1],
+                published[2],
+                published[3],
+                published[4],
+                published[5],
+                tzinfo=timezone.utc,
             )
             if last_crawl and creation_time <= last_crawl:
                 continue
@@ -101,27 +102,8 @@ class RSSDiscoverySource(DiscoverySource):
                     creation_time=creation_time,
                 )
             )
-        if items:
-            self._watermark_repo.set(
-                self._config.source_id,
-                max(item.creation_time for item in items),
-            )
+        self._watermark_repo.set(self._config.source_id, crawl_time)
         return items
-
-
-class YahooFinanceDiscoverySource(RSSDiscoverySource):
-    """Discovers news from Yahoo Finance RSS."""
-
-    RSS_URL = "https://finance.yahoo.com/news/rssindex"
-
-    def __init__(self, watermark_repo: WatermarkRepository) -> None:
-        super().__init__(
-            config=RSSFeedConfig(
-                source_id="yahoo_finance",
-                feed_url=self.RSS_URL,
-            ),
-            watermark_repo=watermark_repo,
-        )
 
 
 class DiscoveryJob(Job):
@@ -133,7 +115,7 @@ class DiscoveryJob(Job):
 
     def __init__(
         self,
-        sources: list[DiscoverySource],
+        sources: Sequence[DiscoverySource],
         repository: NewsItemRepository,
     ) -> None:
         self._sources = sources

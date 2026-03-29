@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from prometheus_backend.news_aggregator.models.news_item import NewsItem, NewsItemStatus
+from prometheus_backend.news_aggregator.models.news_item import NewsItem, NewsItemStatus, SourceType
 from prometheus_backend.news_aggregator.storage.news_item_repository import (
     LocalNewsItemRepository,
     NewsItemRepository,
@@ -10,10 +10,11 @@ from prometheus_backend.news_aggregator.storage.news_item_repository import (
 
 
 def make_item(
-    url: str = "https://reuters.com/article/apple-tsmc", **overrides
+    source_ref: str = "https://reuters.com/article/apple-tsmc", **overrides
 ) -> NewsItem:
     defaults = dict(
-        url=url,
+        source_ref=source_ref,
+        source_type=SourceType.RSS,
         title="Apple secures TSMC capacity",
         source_id="reuters.com",
         status=NewsItemStatus.FETCHED,
@@ -63,8 +64,8 @@ URL_B = "https://ft.com/article/tsmc-capacity"
 
 
 def test_put_multiple_items(repo):
-    repo.put(make_item(url=URL_A))
-    repo.put(make_item(url=URL_B))
+    repo.put(make_item(source_ref=URL_A))
+    repo.put(make_item(source_ref=URL_B))
     assert len(repo.list()) == 2
 
 
@@ -72,13 +73,13 @@ def test_put_multiple_items(repo):
 
 
 def test_get_returns_correct_item(repo):
-    item = make_item(url=URL_A)
+    item = make_item(source_ref=URL_A)
     repo.put(item)
     assert repo.get(URL_A) == item
 
 
 def test_get_returns_none_when_not_found(repo):
-    repo.put(make_item(url=URL_A))
+    repo.put(make_item(source_ref=URL_A))
     assert repo.get("https://unknown.com/article") is None
 
 
@@ -90,8 +91,8 @@ def test_get_returns_none_when_file_does_not_exist(repo):
 
 
 def test_list_returns_all_items(repo):
-    repo.put(make_item(url=URL_A))
-    repo.put(make_item(url=URL_B))
+    repo.put(make_item(source_ref=URL_A))
+    repo.put(make_item(source_ref=URL_B))
     assert len(repo.list()) == 2
 
 
@@ -103,41 +104,41 @@ URL_C = "https://bloomberg.com/article/nvidia"
 
 
 def test_list_filter_by_status_pending(repo):
-    repo.put(make_item(url=URL_A, status=NewsItemStatus.PENDING, raw_content=None))
-    repo.put(make_item(url=URL_B, status=NewsItemStatus.FETCHED))
+    repo.put(make_item(source_ref=URL_A, status=NewsItemStatus.PENDING, raw_content=None))
+    repo.put(make_item(source_ref=URL_B, status=NewsItemStatus.FETCHED))
     results = repo.list(status=NewsItemStatus.PENDING)
     assert len(results) == 1
-    assert results[0].url == URL_A
+    assert results[0].source_ref == URL_A
 
 
 def test_list_filter_by_status_fetched(repo):
-    repo.put(make_item(url=URL_A, status=NewsItemStatus.PENDING, raw_content=None))
-    repo.put(make_item(url=URL_B, status=NewsItemStatus.FETCHED))
-    repo.put(make_item(url=URL_C, status=NewsItemStatus.FETCHED))
+    repo.put(make_item(source_ref=URL_A, status=NewsItemStatus.PENDING, raw_content=None))
+    repo.put(make_item(source_ref=URL_B, status=NewsItemStatus.FETCHED))
+    repo.put(make_item(source_ref=URL_C, status=NewsItemStatus.FETCHED))
     results = repo.list(status=NewsItemStatus.FETCHED)
     assert len(results) == 2
-    assert {r.url for r in results} == {URL_B, URL_C}
+    assert {r.source_ref for r in results} == {URL_B, URL_C}
 
 
 def test_list_filter_returns_empty_when_no_match(repo):
-    repo.put(make_item(url=URL_A, status=NewsItemStatus.PENDING, raw_content=None))
+    repo.put(make_item(source_ref=URL_A, status=NewsItemStatus.PENDING, raw_content=None))
     assert repo.list(status=NewsItemStatus.PROCESSED) == []
 
 
 def test_list_filter_by_source_id(repo):
-    repo.put(make_item(url=URL_A, source_id="reuters.com"))
-    repo.put(make_item(url=URL_B, source_id="ft.com"))
+    repo.put(make_item(source_ref=URL_A, source_id="reuters.com"))
+    repo.put(make_item(source_ref=URL_B, source_id="ft.com"))
     results = repo.list(source_id="reuters.com")
     assert len(results) == 1
-    assert results[0].url == URL_A
+    assert results[0].source_ref == URL_A
 
 
 def test_list_no_filter_returns_all(repo):
-    repo.put(make_item(url=URL_A, status=NewsItemStatus.PENDING, raw_content=None))
-    repo.put(make_item(url=URL_B, status=NewsItemStatus.FETCHED))
+    repo.put(make_item(source_ref=URL_A, status=NewsItemStatus.PENDING, raw_content=None))
+    repo.put(make_item(source_ref=URL_B, status=NewsItemStatus.FETCHED))
     repo.put(
         make_item(
-            url=URL_C, status=NewsItemStatus.FAILED, raw_content=None, error="timeout"
+            source_ref=URL_C, status=NewsItemStatus.FAILED, raw_content=None, error="timeout"
         )
     )
     assert len(repo.list()) == 3
@@ -147,16 +148,16 @@ def test_list_no_filter_returns_all(repo):
 
 
 def test_delete_removes_correct_item(repo):
-    repo.put(make_item(url=URL_A))
-    repo.put(make_item(url=URL_B))
+    repo.put(make_item(source_ref=URL_A))
+    repo.put(make_item(source_ref=URL_B))
     repo.delete(URL_A)
     items = repo.list()
     assert len(items) == 1
-    assert items[0].url == URL_B
+    assert items[0].source_ref == URL_B
 
 
 def test_delete_is_noop_when_id_not_found(repo):
-    repo.put(make_item(url=URL_A))
+    repo.put(make_item(source_ref=URL_A))
     repo.delete("https://unknown.com/article")
     assert len(repo.list()) == 1
 
