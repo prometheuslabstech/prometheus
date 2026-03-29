@@ -10,6 +10,7 @@ from prometheus_backend.news_aggregator.models.news_item import NewsItem, NewsIt
 from prometheus_backend.news_aggregator.storage.news_item_repository import (
     NewsItemRepository,
 )
+from prometheus_backend.news_aggregator.storage.watermark_repository import WatermarkRepository
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,15 @@ class DiscoveredItem:
 
 
 class DiscoverySource(ABC):
-    """Abstract source that discovers URLs without fetching full content."""
+    """Abstract source that discovers URLs without fetching full content.
+
+    Implementations must:
+    1. Load last_crawl_timestamp from WatermarkRepository and filter to items
+       published after it (watermark check).
+    2. Normalize native format (XML/JSON/HTML) into DiscoveredItem.
+    3. Persist the new last_crawl_timestamp via WatermarkRepository after
+       a successful discover().
+    """
 
     @abstractmethod
     def discover(self) -> list[DiscoveredItem]: ...
@@ -34,16 +43,27 @@ class DiscoverySource(ABC):
 @dataclass
 class RSSFeedConfig:
     source_id: str  # publisher domain, e.g. "reuters.com"
-    feed_url: str  # e.g. "https://feeds.reuters.com/reuters/businessNews"
+    feed_url: str   # e.g. "https://feeds.reuters.com/reuters/businessNews"
 
 
 class RSSDiscoverySource(DiscoverySource):
-    """Discovers news items from RSS/Atom feeds."""
+    """Discovers news items from RSS/Atom feeds.
 
-    def __init__(self, config: RSSFeedConfig) -> None:
+    Uses WatermarkRepository to track the last crawl timestamp per source.
+    Only items published after the watermark are returned. The watermark is
+    updated to the latest publication time after each successful discover().
+    """
+
+    def __init__(
+        self,
+        config: RSSFeedConfig,
+        watermark_repo: WatermarkRepository,
+    ) -> None:
         self._config = config
+        self._watermark_repo = watermark_repo
 
     def discover(self) -> list[DiscoveredItem]:
+        last_crawl = self._watermark_repo.get(self._config.source_id)
         feed = feedparser.parse(self._config.feed_url)
         items = []
         for entry in feed.entries:
@@ -61,10 +81,12 @@ class RSSDiscoverySource(DiscoverySource):
                     published[4],
                     published[5],
                     tzinfo=timezone.utc,
-                )  # noqa: E501
+                )
                 if published
                 else datetime.now(timezone.utc)
             )
+            if last_crawl and creation_time <= last_crawl:
+                continue
             items.append(
                 DiscoveredItem(
                     url=url,
@@ -73,13 +95,34 @@ class RSSDiscoverySource(DiscoverySource):
                     creation_time=creation_time,
                 )
             )
+        if items:
+            self._watermark_repo.set(
+                self._config.source_id,
+                max(item.creation_time for item in items),
+            )
         return items
+
+
+class YahooFinanceDiscoverySource(RSSDiscoverySource):
+    """Discovers news from Yahoo Finance RSS."""
+
+    RSS_URL = "https://finance.yahoo.com/news/rssindex"
+
+    def __init__(self, watermark_repo: WatermarkRepository) -> None:
+        super().__init__(
+            config=RSSFeedConfig(
+                source_id="yahoo_finance",
+                feed_url=self.RSS_URL,
+            ),
+            watermark_repo=watermark_repo,
+        )
 
 
 class DiscoveryJob(Job):
     """
     Runs all configured DiscoverySource(s) and stores new URLs as PENDING NewsItems.
-    Skips URLs already present in the repository.
+    Skips URLs already present in the repository as a secondary dedup guard.
+    Time-window filtering is handled by each DiscoverySource via its watermark.
     """
 
     def __init__(
