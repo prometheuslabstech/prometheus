@@ -1,4 +1,3 @@
-import json
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -32,7 +31,7 @@ class LocalHashRepository(HashRepository):
     def _load(self) -> set[str]:
         if not self._path.exists():
             return set()
-        return {json.loads(line)["hash"] for line in self._path.read_text().splitlines() if line}
+        return {line for line in self._path.read_text().splitlines() if line}
 
     def contains(self, hash: str) -> bool:
         """Return True if the hash has been seen before."""
@@ -44,4 +43,4 @@ class LocalHashRepository(HashRepository):
             return
         self._hashes.add(hash)
         with self._path.open("a") as f:
-            f.write(json.dumps({"hash": hash}) + "\n")
+            f.write(hash + "\n")

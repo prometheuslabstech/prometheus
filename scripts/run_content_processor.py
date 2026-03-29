@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 NEWS_ITEMS_PATH = Path("data/news_items.jsonl")
-HASHES_PATH = Path("data/news_items_hashes.jsonl")
+HASHES_PATH = Path("data/news_items_hashes.txt")
 
 
 def main() -> None:
