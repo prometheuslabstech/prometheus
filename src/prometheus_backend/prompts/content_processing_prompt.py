@@ -1,4 +1,4 @@
-"""Prompts for the create_content_item_handler."""
+"""Prompts for the content processing job."""
 
 SYSTEM_INSTRUCTION = """\
 You are a financial content analyst. \

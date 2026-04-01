@@ -3,7 +3,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import PurePosixPath
 from typing import Optional
+from urllib.parse import urlparse
 
 import feedparser
 
@@ -19,6 +21,17 @@ from prometheus_backend.news_aggregator.storage.news_item_repository import (
 from prometheus_backend.news_aggregator.storage.watermark_repository import WatermarkRepository
 
 logger = logging.getLogger(__name__)
+
+_HTML_EXTENSIONS = {".html"}
+
+
+def _is_duplicate(source_ref: str, repository: NewsItemRepository) -> bool:
+    return repository.get(source_ref) is not None
+
+
+def _is_html_url(url: str) -> bool:
+    ext = PurePosixPath(urlparse(url).path).suffix.lower()
+    return ext in _HTML_EXTENSIONS
 
 
 @dataclass
@@ -127,8 +140,11 @@ class DiscoveryJob(Job):
         for source in self._sources:
             discovered = source.discover()
             for item in discovered:
-                if self._repository.get(item.source_ref) is not None:
+                if _is_duplicate(item.source_ref, self._repository):
                     logger.debug("Skipping already-known item: %s", item.source_ref)
+                    continue
+                if not _is_html_url(item.source_ref):
+                    logger.debug("Skipping non-HTML URL: %s", item.source_ref)
                     continue
                 news_item = NewsItem(
                     source_ref=item.source_ref,

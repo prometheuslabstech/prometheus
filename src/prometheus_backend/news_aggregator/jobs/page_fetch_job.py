@@ -1,6 +1,7 @@
 import logging
 
 from prometheus_backend.jobs.base import Job
+from prometheus_backend.news_aggregator.helpers.page_fetch_job_helper import strip_preamble
 from prometheus_backend.news_aggregator.models.news_item import NewsItemStatus, SourceType
 from prometheus_backend.news_aggregator.storage.news_item_repository import (
     NewsItemRepository,
@@ -8,6 +9,8 @@ from prometheus_backend.news_aggregator.storage.news_item_repository import (
 from prometheus_backend.services import tavily_search
 
 logger = logging.getLogger(__name__)
+
+SHOULD_STRIP_PREAMBLE_FOR_SOURCE_IDS = ["yahoo_finance"]
 
 
 class PageFetchJob(Job):
@@ -27,6 +30,8 @@ class PageFetchJob(Job):
         for item in pending:
             try:
                 raw_content = self._fetch(item.source_ref, item.source_type)
+                if item.source_id in SHOULD_STRIP_PREAMBLE_FOR_SOURCE_IDS:
+                    raw_content = strip_preamble(raw_content)
                 updated = item.model_copy(
                     update={
                         "status": NewsItemStatus.FETCHED,

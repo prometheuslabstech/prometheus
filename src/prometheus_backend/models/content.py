@@ -73,11 +73,3 @@ class LLMContentItemOutput(BaseModel):
 
 class ContentItem(ContentItemMeta, LLMContentItemOutput):
     pass
-
-
-class CreateContentItemRequest(BaseModel):
-    source_url: str
-
-
-class CreateContentItemResponse(BaseModel):
-    id: str

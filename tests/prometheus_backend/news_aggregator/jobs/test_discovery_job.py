@@ -9,6 +9,8 @@ from prometheus_backend.news_aggregator.jobs.discovery_job import (
     DiscoverySource,
     RSSDiscoverySource,
     RSSFeedConfig,
+    _is_duplicate,
+    _is_html_url,
 )
 from prometheus_backend.news_aggregator.models.news_item import NewsItemStatus, SourceType
 
@@ -61,7 +63,7 @@ def make_watermark_repo(last_crawl: datetime | None = None):
 
 
 def make_discovered_item(
-    source_ref="https://reuters.com/article/1",
+    source_ref="https://reuters.com/article/1.html",
     source_type=SourceType.RSS,
     title="Test Title",
     source_id="reuters.com",
@@ -233,8 +235,8 @@ def test_discovery_job_skips_existing_ref():
 
 
 def test_discovery_job_calls_discover_on_all_sources():
-    source_a = make_mock_source([make_discovered_item(source_ref="https://reuters.com/1")])
-    source_b = make_mock_source([make_discovered_item(source_ref="https://ft.com/1")])
+    source_a = make_mock_source([make_discovered_item(source_ref="https://reuters.com/1.html")])
+    source_b = make_mock_source([make_discovered_item(source_ref="https://ft.com/1.html")])
     DiscoveryJob(sources=[source_a, source_b], repository=make_mock_repo()).run()
     source_a.discover.assert_called_once()
     source_b.discover.assert_called_once()
@@ -247,8 +249,8 @@ def test_discovery_job_stores_nothing_when_source_returns_empty():
 
 
 def test_discovery_job_stores_items_from_multiple_sources():
-    source_a = make_mock_source([make_discovered_item(source_ref="https://reuters.com/1")])
-    source_b = make_mock_source([make_discovered_item(source_ref="https://ft.com/1")])
+    source_a = make_mock_source([make_discovered_item(source_ref="https://reuters.com/1.html")])
+    source_b = make_mock_source([make_discovered_item(source_ref="https://ft.com/1.html")])
     repo = make_mock_repo()
     DiscoveryJob(sources=[source_a, source_b], repository=repo).run()
     assert repo.put.call_count == 2
@@ -256,7 +258,7 @@ def test_discovery_job_stores_items_from_multiple_sources():
 
 def test_discovery_job_stores_correct_fields():
     item = make_discovered_item(
-        source_ref="https://reuters.com/1",
+        source_ref="https://reuters.com/1.html",
         source_type=SourceType.RSS,
         title="Apple news",
         source_id="reuters.com",
@@ -264,7 +266,7 @@ def test_discovery_job_stores_correct_fields():
     repo = make_mock_repo()
     DiscoveryJob(sources=[make_mock_source([item])], repository=repo).run()
     stored = repo.put.call_args[0][0]
-    assert stored.source_ref == "https://reuters.com/1"
+    assert stored.source_ref == "https://reuters.com/1.html"
     assert stored.source_type == SourceType.RSS
     assert stored.title == "Apple news"
     assert stored.source_id == "reuters.com"
@@ -273,7 +275,7 @@ def test_discovery_job_stores_correct_fields():
 
 def test_discovery_job_stores_author_for_twitter_item():
     item = make_discovered_item(
-        source_ref="1234567890",
+        source_ref="https://twitter.com/Reuters/status/1234567890.html",
         source_type=SourceType.TWITTER,
         source_id="twitter",
         author="@Reuters",
@@ -290,3 +292,91 @@ def test_discovery_job_author_is_none_for_rss_item():
     DiscoveryJob(sources=[make_mock_source([item])], repository=repo).run()
     stored = repo.put.call_args[0][0]
     assert stored.author is None
+
+
+# ── _is_duplicate ─────────────────────────────────────────────────────────────
+
+
+def test_is_duplicate_returns_true_when_repo_has_item():
+    repo = make_mock_repo(existing_refs={"https://reuters.com/article/1"})
+    assert _is_duplicate("https://reuters.com/article/1", repo) is True
+
+
+def test_is_duplicate_returns_false_when_repo_does_not_have_item():
+    repo = make_mock_repo()
+    assert _is_duplicate("https://reuters.com/article/1", repo) is False
+
+
+# ── _is_html_url ──────────────────────────────────────────────────────────────
+
+
+def test_is_html_url_no_extension():
+    assert _is_html_url("https://reuters.com/article/apple-earnings") is False
+
+
+def test_is_html_url_html_extension():
+    assert _is_html_url("https://reuters.com/article/apple.html") is True
+
+
+def test_is_html_url_htm_extension():
+    assert _is_html_url("https://reuters.com/article/apple.htm") is False
+
+
+def test_is_html_url_pdf_extension():
+    assert _is_html_url("https://reuters.com/report.pdf") is False
+
+
+def test_is_html_url_xml_extension():
+    assert _is_html_url("https://reuters.com/feed.xml") is False
+
+
+def test_is_html_url_json_extension():
+    assert _is_html_url("https://reuters.com/data.json") is False
+
+
+def test_is_html_url_image_extension():
+    assert _is_html_url("https://reuters.com/photo.jpg") is False
+
+
+def test_is_html_url_extension_case_insensitive():
+    assert _is_html_url("https://reuters.com/report.PDF") is False
+    assert _is_html_url("https://reuters.com/article.HTML") is True
+
+
+def test_is_html_url_with_query_string_and_no_extension():
+    assert _is_html_url("https://reuters.com/article?id=123") is False
+
+
+def test_is_html_url_with_query_string_and_pdf_extension():
+    assert _is_html_url("https://reuters.com/report.pdf?download=true") is False
+
+
+# ── DiscoveryJob non-HTML filtering ──────────────────────────────────────────
+
+
+def test_discovery_job_skips_pdf_url():
+    item = make_discovered_item(source_ref="https://reuters.com/report.pdf")
+    repo = make_mock_repo()
+    DiscoveryJob(sources=[make_mock_source([item])], repository=repo).run()
+    repo.put.assert_not_called()
+
+
+def test_discovery_job_skips_xml_url():
+    item = make_discovered_item(source_ref="https://reuters.com/feed.xml")
+    repo = make_mock_repo()
+    DiscoveryJob(sources=[make_mock_source([item])], repository=repo).run()
+    repo.put.assert_not_called()
+
+
+def test_discovery_job_skips_url_with_no_extension():
+    item = make_discovered_item(source_ref="https://reuters.com/article/apple-earnings")
+    repo = make_mock_repo()
+    DiscoveryJob(sources=[make_mock_source([item])], repository=repo).run()
+    repo.put.assert_not_called()
+
+
+def test_discovery_job_stores_html_extension_url():
+    item = make_discovered_item(source_ref="https://reuters.com/article/apple.html")
+    repo = make_mock_repo()
+    DiscoveryJob(sources=[make_mock_source([item])], repository=repo).run()
+    repo.put.assert_called_once()
