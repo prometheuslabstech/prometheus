@@ -2,6 +2,8 @@ from datetime import datetime
 from enum import Enum
 from pydantic import BaseModel, Field
 
+from prometheus_backend.content_processing.models import AlertCategory
+
 
 class ContentTheme(str, Enum):
     TECHNOLOGY = "technology"
@@ -68,6 +70,17 @@ class LLMContentItemOutput(BaseModel):
     )
     language: ContentLanguage = Field(
         description="Language the content is written in, as an ISO 639-1 code."
+    )
+    alert_category: AlertCategory = Field(
+        description=(
+            "Type of market event this content represents. "
+            "COMPANY_NARRATIVE_SHIFT: change in a company's story (earnings, management, guidance). "
+            "INDUSTRY_STRUCTURE_CHANGE: competitive dynamics shifting (merger, new entrant, market share). "
+            "REGULATION_POLICY: government or regulatory action affecting markets. "
+            "TECHNOLOGY_INFLECTION: meaningful tech breakthrough or disruption signal. "
+            "MACRO_IMPACT: central bank, inflation, geopolitical events with broad market impact. "
+            "EMERGING_SIGNAL: early or weak signal that doesn't fit neatly elsewhere but may be worth watching."
+        )
     )
 
 

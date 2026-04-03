@@ -18,8 +18,10 @@ def main() -> None:
         from prometheus_backend.servers.analysis import main as run
     elif server == "research":
         from prometheus_backend.servers.research import main as run
+    elif server == "profile":
+        from prometheus_backend.servers.profile import main as run
     else:
-        print("Usage: prometheus <analysis|research>")
+        print("Usage: prometheus <analysis|research|profile>")
         sys.exit(1)
 
     run()
