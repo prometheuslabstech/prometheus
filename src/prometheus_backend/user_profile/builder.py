@@ -37,4 +37,9 @@ def generate_interest_reasons(
     )
 
     raw = gemini.converse(user_message=prompt, system_prompt=SYSTEM_INSTRUCTION)
-    return json.loads(raw)
+    # Strip markdown code fences if Gemini wraps the JSON output
+    stripped = raw.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.split("\n", 1)[-1]
+        stripped = stripped.rsplit("```", 1)[0].strip()
+    return json.loads(stripped)
