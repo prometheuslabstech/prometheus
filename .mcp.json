@@ -1,12 +1,16 @@
 {
   "mcpServers": {
     "prometheus-analysis": {
-      "command": "/Users/sl5234/Workspace/Prometheus/venv/bin/prometheus",
+      "command": "/Users/zexinzhao/Documents/workplace/prometheus/.venv/bin/prometheus",
       "args": ["analysis"]
     },
     "prometheus-research": {
-      "command": "/Users/sl5234/Workspace/Prometheus/venv/bin/prometheus",
+      "command": "/Users/zexinzhao/Documents/workplace/prometheus/.venv/bin/prometheus",
       "args": ["research"]
+    },
+    "prometheus-profile": {
+      "command": "/Users/zexinzhao/Documents/workplace/prometheus/.venv/bin/prometheus",
+      "args": ["profile"]
     }
   }
 }
