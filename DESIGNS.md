@@ -2,70 +2,125 @@
 
 ## Overview
 
-Prometheus is a Python project template with a clean, professional structure designed for maintainability and scalability.
+Prometheus is a financial news intelligence backend. It ingests articles from RSS and other sources, classifies them into structured content items, evaluates their relevance against investor profiles, and delivers personalized alerts.
 
 ## Project Structure
 
 ```
-Prometheus/
+prometheus/
 ├── src/
-│   └── prometheus/          # Main package directory
-│       ├── __init__.py      # Package initialization
-│       └── main.py          # Application entry point
-├── tests/                    # Test suite
-│   ├── __init__.py
-│   └── test_main.py         # Tests for main module
-├── docs/                     # Documentation directory
-├── README.md                 # Project documentation
-├── AGENTS.md                 # Best practices for agents
-├── DESIGNS.md                # This file - project design documentation
-├── requirements.txt          # Python dependencies
-├── setup.py                  # Package installation configuration
-├── pyproject.toml            # Tooling configuration (Black, pytest, mypy, flake8)
-└── .gitignore                # Git ignore patterns
+│   └── prometheus_backend/
+│       ├── news_aggregator/        # RSS discovery and full-page fetch pipeline
+│       ├── content_processing/     # Classification pipeline (NewsItem → ContentItem)
+│       ├── user_profile/           # Investor profile models, builder, repository
+│       ├── models/                 # Shared domain models (ContentItem, AlertCategory, etc.)
+│       ├── prompts/                # LLM system prompts
+│       ├── servers/                # MCP servers (analysis, research, profile)
+│       ├── services/               # External clients (Gemini, Bedrock, Tavily)
+│       ├── storage/                # Storage abstractions and local file-system impl
+│       ├── handlers/               # Notification delivery handlers (not yet built)
+│       └── dagger/                 # AWS client initialization
+├── scripts/                        # Manual pipeline runners
+├── tests/
+├── DESIGNS.md
+├── BACKLOGS.md
+├── IDEAS.md
+└── AGENTS.md
 ```
 
-## Architecture
+## Pipeline Architecture
 
-### Package Structure
-- **`src/prometheus/`**: Contains the main application code
-  - Uses the `src/` layout pattern for better test isolation
-  - All source code is organized in the `prometheus` package
+The system is structured as a sequential pipeline with four discrete stages:
 
-### Entry Point
-- **`main.py`**: Contains the main entry point function
-  - Configured as a console script in `setup.py`
-  - Can be run via `python -m prometheus.main` or `prometheus` command
+```
+[1] News Aggregator
+    RSS/Twitter discovery + full-page fetch
+    Output: NewsItem (raw content, status=FETCHED)
+        ↓
+[2] Content Processor
+    Per-article classification via Gemini
+    Output: ContentItem (structured metadata, single-article scope)
+        ↓
+[3] Feed Evaluator  ← not yet built
+    Relevance scoring against UserProfile
+    Output: alert decision (yes/no + score)
+        ↓
+[4] Notification Delivery  ← not yet built
+    Email digest, push, SMS per NotificationPreferences
+```
 
-### Testing
-- **`tests/`**: Contains all test files
-  - Mirrors the structure of the source code
-  - Uses pytest for testing framework
-  - Includes coverage reporting
+### Stage 1 — News Aggregator
+
+Discovers URLs from RSS feeds and fetches their full content. Stores raw articles as `NewsItem` with a status machine (`PENDING → FETCHED → DEDUPLICATED → PROCESSED`). Writes to local JSONL files.
+
+### Stage 2 — Content Processor
+
+Reads `DEDUPLICATED` items and sends each article body to Gemini with a structured extraction prompt. Outputs a `ContentItem` containing: title, summary, themes, entities, credibility, language, and `AlertCategory`.
+
+**Scope: single article, no external context.** The content processor only sees the article itself. It classifies what the article *is* — it does not evaluate whether it matters to any particular user or in the context of other news.
+
+### Stage 3 — Feed Evaluator (not yet built)
+
+Takes a `ContentItem` and a `UserProfile` and decides whether to trigger an alert. The current model applies `category_weights` (framework-specific) and checks overlap with `followed_stocks` / `followed_themes` against `push_threshold`.
+
+### Stage 4 — Notification Delivery (not yet built)
+
+Dispatches alerts via channels specified in `NotificationPreferences` (email, SMS). Digest scheduling is modeled but not wired.
+
+---
+
+## MCP Servers
+
+Three MCP servers expose tools for Claude Code sessions:
+
+| Server | Tools | Purpose |
+|---|---|---|
+| `prometheus-analysis` | `extract_research_keywords`, `generate_research_plan` | Parse financial text; plan a web research sequence |
+| `prometheus-research` | `web_search` | Execute Tavily web searches from a research plan |
+| `prometheus-profile` | `list_investment_frameworks`, `generate_profile_interest_reasons`, `save_user_profile`, `get_user_profile` | Build and manage investor profiles interactively |
+
+These servers are separate from the automated pipeline — they are tools for Claude to use in interactive research sessions, not steps in the ingestion flow.
+
+---
+
+## Feed Evaluator — Future Expansion Principles
+
+The current Feed Evaluator design is a **relevance filter**: it scores a single `ContentItem` against a `UserProfile` using static category weights. This is intentionally simple for the initial implementation.
+
+As the system matures, the Feed Evaluator should evolve toward a **contextual intelligence layer** governed by the following principles:
+
+### Principle 1: Content processor output is a signal, not a conclusion
+
+The `ContentItem` produced by the content processor (themes, entities, `AlertCategory`) is structured metadata extracted from a single article in isolation. The Feed Evaluator must treat this as raw signal — not as a final judgment. The evaluator is responsible for drawing conclusions in context.
+
+### Principle 2: Relevance requires cross-content context
+
+A single article rarely tells the full story. The evaluator should compare incoming content against the corpus of recently processed items to detect:
+- **Narrative shifts**: Is this contradicting or confirming earlier coverage of the same entity?
+- **Signal clustering**: Are multiple independent sources converging on the same theme or entity in a short window?
+- **Absence of corroboration**: Is a strong claim being made by a single low-credibility source with no supporting coverage?
+
+Evaluating any one item in isolation risks both false positives (noisy one-off articles) and false negatives (weak signals that only become meaningful in aggregate).
+
+### Principle 3: Internet research closes the context gap
+
+When a `ContentItem` references an entity or event the system has no historical context for, the evaluator should be able to trigger web research (via the `prometheus-research` server's `web_search` tool) to gather corroborating or contradicting evidence before scoring relevance. This grounds the evaluation in real-world context rather than relying solely on the article text.
+
+### Principle 4: Historical holdings context shapes scoring
+
+A user's `interest_reasons` (per-stock/per-theme theses captured during profile building) encode *why* they care about each holding. The evaluator should compare incoming content against these stored reasons to assess fit — not just whether an entity is mentioned, but whether the article speaks to the specific thesis the user is tracking. For example, a user holding NVDA for AI infrastructure reasons should score a data-center supply story higher than an NVDA consumer gaming story, even though both mention the same ticker.
+
+### Principle 5: Framework weights are a starting point, not the full model
+
+The `category_weights` in `framework_defaults.py` capture broad tendencies (e.g. macro investors care less about individual company narrative shifts). As the system accumulates data on which alerts a user acts on or dismisses, these weights should be refined per-user rather than remaining static per-framework.
+
+---
 
 ## Configuration
 
-### Python Version
-- **Requires Python 3.12 or above**
-- Configured in `setup.py` and `pyproject.toml`
-
-### Development Tools
-- **Black**: Code formatting
-- **flake8**: Linting
-- **mypy**: Type checking
-- **pytest**: Testing framework
-- **pytest-cov**: Test coverage reporting
-
-### Package Management
-- **`setup.py`**: Defines package metadata and installation
-- **`requirements.txt`**: Lists all dependencies
-- **`pyproject.toml`**: Modern Python tooling configuration
-
-## Design Principles
-
-1. **Separation of Concerns**: Main logic, utilities, and tests are clearly separated
-2. **Type Safety**: Type hints used throughout for better code clarity
-3. **Testability**: Tests are organized and comprehensive
-4. **Maintainability**: Clear structure and documentation
-5. **Modern Python**: Uses Python 3.12+ features and best practices
+- **Python 3.12+** required
+- **Black** — code formatting
+- **flake8** — linting
+- **mypy** — type checking
+- **pytest + pytest-cov** — testing and coverage
 
