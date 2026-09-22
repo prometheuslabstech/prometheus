@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from pydantic import BaseModel, Field
 
-from prometheus_backend.content_processing.models import AlertCategory
+from prometheus_backend.content_processing.models import AlertCategory, ImpactPotential
 
 
 class ContentTheme(str, Enum):
@@ -80,6 +80,26 @@ class LLMContentItemOutput(BaseModel):
             "TECHNOLOGY_INFLECTION: meaningful tech breakthrough or disruption signal. "
             "MACRO_IMPACT: central bank, inflation, geopolitical events with broad market impact. "
             "EMERGING_SIGNAL: early or weak signal that doesn't fit neatly elsewhere but may be worth watching."
+        )
+    )
+    impact_potential: ImpactPotential = Field(
+        description=(
+            "How materially this event could affect the fundamentals or narrative of the entities involved. "
+            "HIGH: likely to change revenue, margins, competitive position, or the prevailing thesis. "
+            "MEDIUM: meaningful but incremental, or material only to a subset of entities. "
+            "LOW: routine news, minor updates, or commentary with little fundamental consequence."
+        )
+    )
+    narrative_shift: bool = Field(
+        description=(
+            "True only if this content represents a structural change in how the market should view "
+            "an entity, industry, or theme — not a continuation of an existing story."
+        )
+    )
+    reasoning: str = Field(
+        description=(
+            "One or two neutral sentences explaining why this matters. "
+            "Describe consequences, not recommendations — no buy/sell language or price targets."
         )
     )
 

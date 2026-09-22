@@ -8,3 +8,9 @@ class AlertCategory(str, Enum):
     TECHNOLOGY_INFLECTION = "technology_inflection"
     MACRO_IMPACT = "macro_impact"
     EMERGING_SIGNAL = "emerging_signal"
+
+
+class ImpactPotential(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"

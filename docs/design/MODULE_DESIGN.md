@@ -762,8 +762,8 @@ No circular dependencies.
 5. ~~`jobs/base.py`~~ **done**
 6. ~~`news_aggregator/jobs/discovery_job.py`~~ **done**
 7. ~~`news_aggregator/jobs/page_fetch_job.py`~~ **done**
-8. `content_processing` — extend LLM prompt with rubric fields; update `ContentItem` model
-9. `user_profile`
+8. ~~`content_processing`~~ **done** — rubric fields (`alert_category`, `impact_potential`, `narrative_shift`, `reasoning`) on `ContentItem`
+9. ~~`user_profile`~~ **done**
 10. `clustering` — `ClusteringJob`, `ContentCluster`, `ContentClusterStore`
 11. `feed_evaluation` — `FeedEvaluationJob`, `EvaluationResult`, `PushHistory`, stores
 12. `scheduler` — wires all jobs into a runnable cycle

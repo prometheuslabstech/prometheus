@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from prometheus_backend.content_processing.models import AlertCategory, ImpactPotential
 from prometheus_backend.models.content import (
     ContentCredibility,
     ContentItem,
@@ -28,6 +29,10 @@ def make_item(id: str, title: str = "Test Article") -> ContentItem:
         entities=["Apple"],
         credibility=ContentCredibility.HIGH,
         language=ContentLanguage.ENGLISH,
+        alert_category=AlertCategory.TECHNOLOGY_INFLECTION,
+        impact_potential=ImpactPotential.MEDIUM,
+        narrative_shift=False,
+        reasoning="A test reason.",
         created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )
 
