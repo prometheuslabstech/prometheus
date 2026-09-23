@@ -410,6 +410,10 @@ class ContentProcessor:
     def process(self, item: NewsItem) -> Optional[ContentItem]: ...
 ```
 
+**Pending for step 11 matching**: `related_entities: list[str]` — companies the event materially
+affects without being the subject (suppliers, customers, competitors). Populated by the same LLM
+call; consumed by `feed_evaluation` matching layer 2.
+
 Returns `None` on LLM failure — pipeline skips and logs without blocking. Scheduler calls `Deduplicator.mark_seen()` and updates `NewsItem → PROCESSED` after successful output.
 
 ---
@@ -451,10 +455,79 @@ Routing (PUSH / DIGEST / DISCARD) is a property of `EvaluationResult` — not of
 
 **Note**: The evaluator must not produce buy/sell signals, price targets, or investment advice.
 
+#### Matching — which users see a cluster at all
+
+Deterministic, no LLM. A cluster reaches step 2 for a user only if one of these holds:
+
+| Layer | Rule | Status |
+|---|---|---|
+| 1. Direct | cluster `entities` ∩ `user.followed_stocks` ≠ ∅ | V1 |
+| 2. Indirect | cluster `related_entities` ∩ `user.followed_stocks` ≠ ∅ | V1 |
+| 3. Thesis | embedding similarity(cluster summaries, `user.interest_reasons`) ≥ threshold | deferred |
+
+`related_entities` is produced by `ContentProcessor` alongside `entities`: companies the event
+materially affects without naming them as the subject (suppliers, customers, competitors).
+This is what lets a TSMC capacity story reach an NVDA holder.
+
+`followed_themes` is **not** sufficient on its own — a sector matches nearly everything and would
+make step 2 prompts large and imprecise. Themes act only as a tiebreaker within a matched cluster.
+
+Layer 3 requires entity normalization to be reliable first (tickers, not company names).
+Brute-force cosine similarity is adequate at current scale; a vector index is future work.
+
+#### Scoring — how routing is decided
+
+Importance is user-independent and comes from the step-8 rubric. Relevance is user-specific and is
+the **only** thing the LLM judges. Code combines them, so routing is deterministic and testable.
+
+```
+importance(cluster) = impact_score + shift_bonus          # capped at 1.0
+    impact_score: HIGH 1.0 | MEDIUM 0.6 | LOW 0.3         # max across items in cluster
+    shift_bonus:  +0.2 if any item has narrative_shift = True
+
+relevance(user, cluster) ← LLM picks one bucket
+    DIRECT 1.0      a followed stock is the subject
+    INDIRECT 0.7    materially affects a followed stock, or the user's stated interest reason
+    TANGENTIAL 0.3  same sector or theme, no specific connection
+    NONE 0.0
+
+score = importance × relevance × category_weight × source_trust
+
+    category_weight: user.evaluator_config.category_weights[category]
+                     — highest weight among categories present in the cluster
+    source_trust:    mean of user.evaluator_config.source_trust for the cluster's sources
+                     — defaults to 1.0 for unrated sources
+
+routing:
+    score ≥ push_threshold    → PUSH   # UserEvaluatorConfig.push_threshold, default 0.75
+    score ≥ digest_threshold  → DIGEST # new field on UserEvaluatorConfig, default 0.35
+    otherwise                 → DISCARD
+```
+
+Suppression is applied after scoring, in code: a PUSH is downgraded to DIGEST if the same entity
+was pushed to that user within `suppression_window_days` (read from `PushHistoryStore`).
+
+Worked example — user follows AAPL, framework `value` (`technology_inflection` weight 0.8,
+`push_threshold` 0.75); cluster is the TSMC capacity story, HIGH impact, narrative shift:
+
+```
+importance = 1.0 (0.8 + 0.2, capped)   relevance = 1.0 (DIRECT)
+score = 1.0 × 1.0 × 0.8 × 1.0 = 0.80 ≥ 0.75  → PUSH
+```
+
+The same cluster at MEDIUM impact scores 0.48 → DIGEST.
+
+**Why this split**: it gives the step-8 rubric fields a consumer; the LLM judges only relevance,
+which it does well, rather than inventing a calibrated score; feedback adjustments to
+`category_weights` / `push_threshold` have predictable, inspectable effects; and all routing logic
+is pure functions, unit-testable without an LLM.
+
+**Dependency**: importance is only as good as the rubric. A prompt that over-rates routine news
+inflates scores for every user — rubric calibration is a precondition, not a detail.
+
 #### Risk: context window size
-User filtering in step 1 is load-bearing. If the entity/theme overlap filter is too loose,
-the batch LLM prompt grows large on busy news days. Future mitigation: tighter sector-level
-pre-filtering or splitting large clusters.
+Matching in step 1 is load-bearing. If it is too loose, the batch LLM prompt grows large on busy
+news days. Future mitigation: tighter pre-filtering or splitting large clusters.
 
 #### Models
 
@@ -469,6 +542,8 @@ class EvaluationResult(BaseModel):
     cluster_id: str
     user_id: str
     routing: AlertRouting
+    relevance: Relevance   # LLM-assigned bucket
+    score: float           # computed — retained for tuning and debugging
     synthesis: str         # LLM-generated summary, user-facing on PUSH and DIGEST
 
 class PushHistory(BaseModel):
@@ -505,11 +580,26 @@ class FeedEvaluationJob(Job):
 
     def run(self) -> None:
         # For each ContentCluster not yet evaluated:
-        #   step 1: filter UserProfiles by entity/theme overlap with cluster
+        #   step 1: match UserProfiles (direct + indirect entity overlap)
         #   step 2: batch LLM call with cluster summaries + matched profiles
         #           + recent PushHistory per user (dedup context)
-        #   step 3: persist EvaluationResult per user
+        #           → returns relevance bucket + synthesis per user
+        #   step 3: score() in code → routing; apply suppression window
+        #   step 4: persist EvaluationResult per user
         #           write PushHistory for PUSH-routed results
+```
+
+```python
+class Relevance(str, Enum):
+    DIRECT = "direct"          # 1.0
+    INDIRECT = "indirect"      # 0.7
+    TANGENTIAL = "tangential"  # 0.3
+    NONE = "none"              # 0.0
+
+def importance(cluster: ContentCluster, items: list[ContentItem]) -> float: ...
+def score(importance: float, relevance: Relevance, config: UserEvaluatorConfig,
+          categories: list[AlertCategory], source_ids: list[str]) -> float: ...
+def route(score: float, config: UserEvaluatorConfig) -> AlertRouting: ...
 ```
 
 ---
@@ -762,8 +852,8 @@ No circular dependencies.
 5. ~~`jobs/base.py`~~ **done**
 6. ~~`news_aggregator/jobs/discovery_job.py`~~ **done**
 7. ~~`news_aggregator/jobs/page_fetch_job.py`~~ **done**
-8. `content_processing` — extend LLM prompt with rubric fields; update `ContentItem` model
-9. `user_profile`
+8. ~~`content_processing`~~ **done** — rubric fields (`alert_category`, `impact_potential`, `narrative_shift`, `reasoning`) on `ContentItem`
+9. ~~`user_profile`~~ **done**
 10. `clustering` — `ClusteringJob`, `ContentCluster`, `ContentClusterStore`
 11. `feed_evaluation` — `FeedEvaluationJob`, `EvaluationResult`, `PushHistory`, stores
 12. `scheduler` — wires all jobs into a runnable cycle
@@ -785,3 +875,5 @@ No circular dependencies.
 | 7 | Push rate cap enforcement (0–2/week max) | `PushHistoryStore` provides the data; enforcement logic deferred |
 | 8 | Digest aggregation + scheduling | `EvaluationResult(routing=DIGEST)` items are persisted; scheduler is future work |
 | 9 | Feedback loop wired into evaluator | `UserEvaluatorConfig` fields defined; not yet passed into LLM prompt |
+| 10 | Embedding-based thesis matching (layer 3) | Direct + indirect entity matching ships first; needs reliable ticker normalization |
+| 11 | Vector index for matching | Brute-force cosine is adequate at current user count |
